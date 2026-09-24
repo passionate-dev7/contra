@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-dim: var(--ink-dim);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-focus: var(--focus);
+  --font-display: var(--font-spectral);
+  --font-body: var(--font-work-sans);
+  --font-mono: var(--font-plex-mono);
+  --radius-ticket: 4px;
+}
+
+:root {
+  --paper: #f1ecdf;
+  --paper-raised: #fbf8f0;
+  --ink: #201a12;
+  --ink-dim: #6b6252;
+  --rule: #d9d0bc;
+  --rule-strong: #b7ac90;
+  --accent: #b5541f;
+  --accent-ink: #fbf8f0;
+  --positive: #3f6b3a;
+  --negative: #a3271f;
+  --focus: #1c3faa;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--rule);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-dot {
+    animation: pulse-dot 2.4s ease-in-out infinite;
+  }
+  .press-scale:active {
+    transform: scale(0.97);
+  }
+  .enter-scale {
+    animation: enter-scale 180ms ease-out both;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes enter-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

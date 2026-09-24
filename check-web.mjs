@@ -17,7 +17,9 @@ try {
   if (open !== "NVDAx,QQQx,SPYx,TSLAx") throw new Error(`borrowable set must come from live reserve config; got ${open}`);
   if (!r.some((x) => x.symbol === "MSTRx" && !x.borrowable && /limit/i.test(x.reason ?? ""))) throw new Error("blocked tickers must say why (borrow limit 0)");
   const home = await (await get("/")).text();
-  if (!/4 of 9/.test(home.replace(/<[^>]+>/g, " "))) throw new Error('home must state "4 of 9" xStocks can be shorted');
+  const xs = r.filter((x) => /x$/.test(x.symbol));
+  const phrase = `${xs.filter((x) => x.borrowable).length} of ${xs.length}`;
+  if (!home.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").includes(phrase)) throw new Error(`home must state "${phrase}" xStocks can be shorted (computed from live reserves)`);
   if (!/market (open|closed)/i.test(home.replace(/<[^>]+>/g, " "))) throw new Error("home must show US market open/closed state");
   const o = await (await get("/api/open", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ owner: "sadmBTQm5HJsyzWHEjV4YwG9CiahZKVDVqAyS4Wx1zH", ticker: "SPYx", usdcCollateral: "500000", borrowRaw: "100000" }) })).json();
@@ -25,5 +27,5 @@ try {
   if (!txs.length) throw new Error(`/api/open returned no transaction: ${JSON.stringify(o).slice(0, 200)}`);
   const progs = new Set(txs.flatMap((b) => { const t = VersionedTransaction.deserialize(Buffer.from(b, "base64")); return t.message.compiledInstructions.map((i) => t.message.staticAccountKeys[i.programIdIndex]?.toBase58()); }));
   if (!progs.has(KLEND) || !progs.has(JUP)) throw new Error(`open-short tx must call Kamino and Jupiter; programs: ${[...progs].join(",")}`);
-  console.log(`ok: DESIGN.md + log entry, live borrowable set ${open}, 4 of 9 stated, market state shown, open tx calls Kamino + Jupiter`);
+  console.log(`ok: DESIGN.md + log entry, live borrowable set ${open}, live N of M stated, market state shown, open tx calls Kamino + Jupiter`);
 } finally { try { process.kill(-srv.pid); } catch {} }
