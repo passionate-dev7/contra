@@ -28,7 +28,7 @@ const { Obligation } = await import(
   ).href
 );
 
-const artifactPath = resolve(process.argv[2] ?? "./artifacts/sim-open.json");
+const artifactPath = process.argv[2] ? resolve(process.argv[2]) : resolve(__dirname, "artifacts/sim-open.json");
 const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";

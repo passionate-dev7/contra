@@ -54,6 +54,7 @@ export async function getQuote(p: {
   outputMint: string;
   amount: bigint;
   slippageBps: number;
+  maxAccounts?: number; // caps route size so the swap composes with Kamino ixs in one v0 message
 }): Promise<JupQuote> {
   const params = new URLSearchParams({
     inputMint: p.inputMint,
@@ -61,6 +62,7 @@ export async function getQuote(p: {
     amount: p.amount.toString(),
     slippageBps: String(p.slippageBps),
     swapMode: "ExactIn",
+    ...(p.maxAccounts !== undefined ? { maxAccounts: String(p.maxAccounts) } : {}),
   });
   const res = await fetch(`${JUP_QUOTE_URL}?${params.toString()}`);
   const text = await res.text();

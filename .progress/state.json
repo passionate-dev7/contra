@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "project": {
+    "name": "contra",
+    "created": "2026-09-24T10:46:06+00:00"
+  },
+  "features": [
+    {
+      "id": "atomic-short",
+      "title": "One-signature xStock short and close",
+      "priority": "high",
+      "tags": [],
+      "product": true,
+      "product_gate": {
+        "user": "non-US Solana traders wanting short stock exposure",
+        "buyer": "traders currently using Hyperliquid stock perps",
+        "job": "open and close a short on a tokenized stock",
+        "verb": "sign one transaction: deposit USDC, borrow xStock, sell via Jupiter",
+        "wedge": "atomic open and close with a market-hours gate",
+        "direct_alternative": "Kamino UI deposit and borrow, then Jupiter sell, as separate transactions",
+        "new_capability": "open and close in one signature with no window holding a borrowed stock; shows which tickers are borrowable (4 of 9) and blocks opens while the oracle is stale",
+        "kill_shot": "a user can already do the same three steps in Kamino and Jupiter; this may be judged a transaction wrapper",
+        "evidence": [
+          "Kamino reserves/metrics: 22.45M xStock supplied, 163k borrowed, 2026-09-24",
+          "klend reserve config: borrowLimit 0 on 5 of 9 xStocks",
+          "mainnet simulation green: deposit, borrow 100000 raw SPYx, sell; red on oversized borrow"
+        ],
+        "decision": "pass",
+        "updated": "2026-09-24T10:46:06+00:00"
+      },
+      "blocked": null,
+      "notes": [],
+      "criteria": [
+        {
+          "kind": "auto",
+          "name": "open-sim",
+          "cmd": "node packages/short/check.mjs | grep -q GREEN",
+          "last_run": "2026-09-24T11:33:53+00:00",
+          "last_exit": 0,
+          "duration_ms": 183,
+          "output_tail": ""
+        },
+        {
+          "kind": "auto",
+          "name": "web",
+          "cmd": "node check-web.mjs | grep -q '^ok:'",
+          "last_run": "2026-09-24T11:34:22+00:00",
+          "last_exit": 1,
+          "duration_ms": 28951,
+          "output_tail": "  status: 1,\n  signal: null,\n  output: [ null, null, null ],\n  pid: 83005,\n  stdout: null,\n  stderr: null\n}\nNode.js v24.9.0"
+        },
+        {
+          "kind": "manual",
+          "name": "close-and-mainnet::close simulated green and one real short opened and closed"
+        },
+        {
+          "kind": "auto",
+          "name": "close-sim",
+          "cmd": "node packages/short/check-close.mjs | grep -q GREEN",
+          "last_run": "2026-09-24T11:34:23+00:00",
+          "last_exit": 0,
+          "duration_ms": 592,
+          "output_tail": ""
+        }
+      ]
+    }
+  ],
+  "customers": [],
+  "history": [
+    {
+      "ts": "2026-09-24T10:46:07+00:00",
+      "checked": 1,
+      "failed_criteria": 0
+    },
+    {
+      "ts": "2026-09-24T11:33:31+00:00",
+      "checked": 1,
+      "failed_criteria": 2
+    },
+    {
+      "ts": "2026-09-24T11:34:23+00:00",
+      "checked": 1,
+      "failed_criteria": 1
+    }
+  ],
+  "updated": "2026-09-24T11:34:23+00:00"
+}

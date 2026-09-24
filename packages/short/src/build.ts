@@ -10,13 +10,18 @@ import {
 } from "@solana/web3.js";
 import { address, none, type Address } from "@solana/kit";
 import { KaminoAction } from "@kamino-finance/klend-sdk";
-import { loadMarket, findUsdcReserve, findXstockReserve, vanillaObligationType, ledgerInstant } from "./market.js";
+import type { KaminoMarket, KaminoReserve } from "@kamino-finance/klend-sdk";
+import { loadMarket, findUsdcReserve, findXstockReserve, vanillaObligationType, vanillaObligationAddress, ledgerInstant } from "./market.js";
+import { buildScopeRefresh } from "./scope.js";
 import { kitIxToWeb3, readOnlySigner } from "./kit.js";
 import { getQuote, getSwapInstructions, routeLabel, type JupQuote } from "./jupiter.js";
-import { USDC_MINT } from "./constants.js";
+import { USDC_MINT, XSTOCKS_MARKET_LUT } from "./constants.js";
 
 const V2_IXS = true;
 const EXTRA_COMPUTE_BUDGET = 1_400_000;
+const BUYBACK_BUFFER_BPS = 50;
+// Measured: a Byreal route pushed Scope refresh + buy + repay + withdraw over 1232 bytes; Riptide fit at 1165.
+const CLOSE_MAX_SWAP_ACCOUNTS = 20;
 
 export interface ShortRequest {
   owner: string;
@@ -44,6 +49,14 @@ export interface BuiltShort {
   /** Present only when the combined message did not fit in one v0 transaction. */
   secondTransaction?: VersionedTransaction;
   reason: string; // why one tx vs a split, for the report
+  scopeTokens: number[]; // Scope entries refreshed in-tx by the leading refresh_price_list
+}
+
+/** Every reserve klend will refresh for this owner's obligation plus the action's two reserves. */
+async function reservesToPrice(market: KaminoMarket, owner: Address, action: KaminoReserve[]): Promise<Address[]> {
+  const obligation = await market.getObligationByAddress(await vanillaObligationAddress(market, owner));
+  const held = obligation === null ? [] : [...obligation.getDeposits(), ...obligation.getBorrows()].map((p) => p.reserveAddress);
+  return [...held, ...action.map((r) => r.address)];
 }
 
 function toRaw(uiAmount: number, decimals: number): string {
@@ -103,6 +116,10 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
   const usdcDecimals = Number(usdcReserve.state.liquidity.mintDecimals.toString());
   const xstockDecimals = Number(xstockReserve.state.liquidity.mintDecimals.toString());
 
+  // Throws MarketClosedError before anything is built when Scope's upstream is too old to refresh.
+  const scopeRefresh = await buildScopeRefresh(market, await reservesToPrice(market, ownerAddr, [usdcReserve, xstockReserve]));
+  const lead = [ComputeBudgetProgram.setComputeUnitLimit({ units: EXTRA_COMPUTE_BUDGET }), ...(scopeRefresh.instruction ? [scopeRefresh.instruction] : [])];
+
   const depositAmountRaw = toRaw(req.usdcCollateral, usdcDecimals);
   const borrowAmountRaw = toRaw(req.borrowAmount, xstockDecimals);
 
@@ -133,10 +150,10 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
   });
   const swapIxs = await getSwapInstructions({ quote, userPublicKey: req.owner });
 
-  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({ units: EXTRA_COMPUTE_BUDGET });
-  const allIxs = [computeBudgetIx, ...kaminoIxs, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup];
+  // Scope's refresh_price_list must be preceded only by ComputeBudget ixs, so it sits at index 1.
+  const allIxs = [...lead, ...kaminoIxs, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup];
 
-  const lookupTables = await resolveLookupTables(conn, swapIxs.lookupTableAddresses);
+  const lookupTables = await resolveLookupTables(conn, [XSTOCKS_MARKET_LUT, ...swapIxs.lookupTableAddresses]);
   const payer = new PublicKey(req.owner);
 
   const combined = await compileMessage(conn, payer, allIxs, lookupTables);
@@ -149,17 +166,18 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
       route: routeLabel(quote),
       transaction: combined,
       reason: `single v0 transaction: deposit + borrow + Jupiter sell fit within the 1232-byte limit (${combinedSize} bytes)`,
+      scopeTokens: scopeRefresh.tokens,
     };
   }
 
   // Split: Kamino leg (deposit+borrow) first, Jupiter leg (sell) second. The
   // Jupiter leg must run after the Kamino leg lands, since it spends the
   // xStock the borrow just minted into the owner's account.
-  const kaminoTx = await compileMessage(conn, payer, [computeBudgetIx, ...kaminoIxs], []);
+  const kaminoTx = await compileMessage(conn, payer, [...lead, ...kaminoIxs], lookupTables);
   const jupTx = await compileMessage(
     conn,
     payer,
-    [computeBudgetIx, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup],
+    [lead[0]!, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup],
     lookupTables,
   );
   return {
@@ -172,6 +190,7 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
     reason:
       "split into 2 transactions: the combined message exceeded the 1232-byte v0 limit. " +
       "tx1 = Kamino deposit+borrow, tx2 (secondTransaction) = Jupiter sell, sent after tx1 lands.",
+    scopeTokens: scopeRefresh.tokens,
   };
 }
 
@@ -190,18 +209,31 @@ export async function buildCloseShort(conn: Connection, req: CloseShortRequest):
 
   const repayAmountRaw = toRaw(req.repayAmount, xstockDecimals);
   const withdrawAmountRaw = toRaw(req.withdrawUsdc, usdcDecimals);
-  const maxUsdcInRaw = toRaw(req.maxUsdcIn, usdcDecimals);
+  const maxUsdcInRaw = BigInt(toRaw(req.maxUsdcIn, usdcDecimals));
 
-  const quote = await getQuote({
-    inputMint: USDC_MINT,
-    outputMint: xstockReserve.getLiquidityMint().toString(),
-    amount: BigInt(maxUsdcInRaw),
-    slippageBps: req.slippageBps ?? 100,
-  });
-  // ExactIn on a USDC budget will not land exactly repayAmountRaw of xStock;
-  // callers size maxUsdcIn generously and the repay amount separately covers
-  // exactly what is owed. A production close would use ExactOut here; kept
-  // ExactIn to match the same quote/swap-instructions path as the open leg.
+  const scopeRefresh = await buildScopeRefresh(market, await reservesToPrice(market, ownerAddr, [usdcReserve, xstockReserve]));
+  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({ units: EXTRA_COMPUTE_BUDGET });
+  const lead = [computeBudgetIx, ...(scopeRefresh.instruction ? [scopeRefresh.instruction] : [])];
+
+  // Jupiter has no ExactOut route for the xStock mints (NO_ROUTES_FOUND, measured 2026-09-24), so buy
+  // ExactIn with a buffer over the oracle value and require the post-slippage minimum out to cover the repay.
+  // The surplus (at most buffer + slippage of the repay) stays in the owner's xStock account.
+  const slippageBps = req.slippageBps ?? 100;
+  const bufferBps = BUYBACK_BUFFER_BPS + slippageBps;
+  const oracleUsdcRaw = new Decimal(req.repayAmount).mul(xstockReserve.getOracleMarketPrice()).mul(new Decimal(10).pow(usdcDecimals));
+  let usdcIn = BigInt(oracleUsdcRaw.mul(10_000 + bufferBps).div(10_000).ceil().toFixed(0));
+  let quote = await getQuote({ inputMint: USDC_MINT, outputMint: xstockReserve.getLiquidityMint().toString(), amount: usdcIn, slippageBps, maxAccounts: CLOSE_MAX_SWAP_ACCOUNTS });
+  if (BigInt(quote.otherAmountThreshold) < BigInt(repayAmountRaw)) {
+    // Pool price sits above the oracle: scale the input by the observed shortfall and re-quote once.
+    usdcIn = (usdcIn * BigInt(repayAmountRaw) * BigInt(10_000 + bufferBps)) / (BigInt(quote.otherAmountThreshold) * 10_000n) + 1n;
+    quote = await getQuote({ inputMint: USDC_MINT, outputMint: xstockReserve.getLiquidityMint().toString(), amount: usdcIn, slippageBps, maxAccounts: CLOSE_MAX_SWAP_ACCOUNTS });
+  }
+  if (BigInt(quote.otherAmountThreshold) < BigInt(repayAmountRaw)) {
+    throw new Error(`buy-back quote min out ${quote.otherAmountThreshold} is below the repay amount ${repayAmountRaw}`);
+  }
+  if (usdcIn > maxUsdcInRaw) {
+    throw new Error(`buy-back of ${req.repayAmount} ${req.ticker}x needs ${usdcIn} raw USDC, over maxUsdcIn ${maxUsdcInRaw}`);
+  }
   const swapIxs = await getSwapInstructions({ quote, userPublicKey: req.owner });
 
   const axn = await KaminoAction.buildRepayAndWithdrawTxns({
@@ -223,17 +255,29 @@ export async function buildCloseShort(conn: Connection, req: CloseShortRequest):
   });
   const kaminoIxs = KaminoAction.actionToIxs(axn).map(kitIxToWeb3);
 
-  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({ units: EXTRA_COMPUTE_BUDGET });
-  const allIxs = [computeBudgetIx, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup, ...kaminoIxs];
-  const lookupTables = await resolveLookupTables(conn, swapIxs.lookupTableAddresses);
+  const allIxs = [...lead, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup, ...kaminoIxs];
+  const lookupTables = await resolveLookupTables(conn, [XSTOCKS_MARKET_LUT, ...swapIxs.lookupTableAddresses]);
   const payer = new PublicKey(req.owner);
 
-  const transaction = await compileMessage(conn, payer, allIxs, lookupTables);
-  const closeSize = trySerializedSize(transaction);
-  const reason =
-    closeSize !== null && closeSize <= 1232
-      ? `single v0 transaction: Jupiter buy + repay + withdraw fit within the 1232-byte limit (${closeSize} bytes)`
-      : "over the 1232-byte v0 limit; split required (see buildOpenShort's split path for the pattern)";
-
-  return { instructions: allIxs, lookupTables, quote, route: routeLabel(quote), transaction, reason };
+  const combined = await compileMessage(conn, payer, allIxs, lookupTables);
+  const closeSize = trySerializedSize(combined);
+  const base = { instructions: allIxs, lookupTables, quote, route: routeLabel(quote), scopeTokens: scopeRefresh.tokens };
+  if (closeSize !== null && closeSize <= 1232) {
+    return {
+      ...base,
+      transaction: combined,
+      reason: `single v0 transaction: Scope refresh + Jupiter buy + repay + withdraw fit within the 1232-byte limit (${closeSize} bytes)`,
+    };
+  }
+  // Split: buy back first, then repay + withdraw once the xStock is in the owner's account.
+  const jupTx = await compileMessage(conn, payer, [computeBudgetIx, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup], lookupTables);
+  const kaminoTx = await compileMessage(conn, payer, [...lead, ...kaminoIxs], lookupTables);
+  return {
+    ...base,
+    transaction: jupTx,
+    secondTransaction: kaminoTx,
+    reason:
+      "split into 2 transactions: the combined message exceeded the 1232-byte v0 limit. " +
+      "tx1 = Jupiter buy-back, tx2 (secondTransaction) = Scope refresh + repay + withdraw, sent after tx1 lands.",
+  };
 }

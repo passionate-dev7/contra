@@ -2,6 +2,9 @@
 export const XSTOCKS_MARKET = "5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua";
 export const KLEND_PROGRAM_ID = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
 export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+/** Kamino-published LUT for the xStocks Market (api.kamino.finance/v2/kamino-market, verified on-chain 2026-09-24:
+ * active, 95 entries incl. market, reserves, Scope prices, klend program). Shrinks the Kamino + Scope legs. */
+export const XSTOCKS_MARKET_LUT = "8ofreL6hKfEet1DnhHVGvCTnSdz4pg85PpbuCUHnEcKm";
 
 export function reserveMetricsUrl(market: string): string {
   return `https://api.kamino.finance/kamino-market/${market}/reserves/metrics`;

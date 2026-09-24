@@ -12,10 +12,11 @@ export class PythApiKeyMissingError extends Error {
 }
 
 export class MarketClosedError extends Error {
-  constructor(ticker: string, nextOpenUnix: number | null) {
+  constructor(ticker: string, nextOpenUnix: number | null, detail?: string) {
     super(
       `Equity.US.${ticker}/USD market is closed` +
-        (nextOpenUnix !== null ? `; next open ${new Date(nextOpenUnix * 1000).toISOString()}` : ""),
+        (nextOpenUnix !== null ? `; next open ${new Date(nextOpenUnix * 1000).toISOString()}` : "") +
+        (detail !== undefined ? `: ${detail}` : ""),
     );
     this.name = "MarketClosedError";
   }
