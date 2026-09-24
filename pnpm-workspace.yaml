@@ -1,0 +1,11 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+allowBuilds:
+  # esbuild must run its postinstall or the binary is never linked and vitest/next fail.
+  esbuild: true
+  # Optional native accelerators. Their pure-JS fallbacks are correct, and letting them
+  # compile is a needless build dependency and supply-chain surface for a 5-day build.
+  bigint-buffer: false
+  bufferutil: false
+  utf-8-validate: false

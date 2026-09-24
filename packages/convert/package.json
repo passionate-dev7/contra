@@ -1,0 +1,1 @@
+{"name": "@lastcall/convert", "private": true, "type": "module", "version": "0.1.0", "scripts": {"build-tx": "tsx src/cli.ts", "typecheck": "tsc --noEmit"}, "dependencies": {"@fineprint/exec": "workspace:*", "@solana/spl-token": "^0.4.13", "@solana/web3.js": "^1.98.4"}, "devDependencies": {"@types/node": "^22.10.2", "tsx": "^4.19.4", "typescript": "^5.7.2"}}
