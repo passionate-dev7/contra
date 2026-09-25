@@ -1,15 +1,5 @@
-import { PublicKey } from "@solana/web3.js";
-import { operativeMultiplier } from "@fineprint/core";
-import {
-  HERMES_URL,
-  USDC_MINT,
-  findUsdcReserve,
-  findXstockReserve,
-  getQuote,
-  loadMarket,
-  resolveEquityFeed,
-  web3Connection,
-} from "@contra/short";
+import { HERMES_URL, findXstockReserve, loadMarket, resolveEquityFeed } from "@contra/short";
+import { readXstockLivePrice } from "./xstock-price";
 
 const HERMES_TIMEOUT_MS = 10_000;
 /** Past this publish age the equity session reads as closed when the feed's
@@ -46,44 +36,6 @@ function unavailable(ticker: string, reason: string): PythFair {
     gapBps: null,
     reason,
   };
-}
-
-interface ScaledUiAmountState {
-  multiplier?: unknown;
-  newMultiplier?: unknown;
-  newMultiplierEffectiveTimestamp?: unknown;
-}
-
-/** Operative scaled-UI multiplier for a Token-2022 mint: 1 when the mint has
- * no scaledUiAmountConfig extension. A read failure throws rather than
- * silently pricing at 1x, which would misprice a scaled mint. */
-async function readOperativeMultiplier(mint: string): Promise<number> {
-  const conn = web3Connection();
-  const parsed = await conn.getParsedAccountInfo(new PublicKey(mint), "confirmed");
-  const data = parsed.value?.data;
-  if (data === undefined || data === null || Buffer.isBuffer(data)) {
-    throw new Error(`mint account data is not parsed: ${mint}`);
-  }
-  const info = (data.parsed as { info?: { extensions?: unknown } }).info;
-  const extensions = Array.isArray(info?.extensions)
-    ? (info.extensions as Array<{ extension?: unknown; state?: unknown }>)
-    : [];
-  const entry = extensions.find((e) => e.extension === "scaledUiAmountConfig");
-  if (entry === undefined) return 1;
-  const state = (entry.state ?? {}) as ScaledUiAmountState;
-  if (
-    typeof state.multiplier !== "string" ||
-    typeof state.newMultiplier !== "string" ||
-    typeof state.newMultiplierEffectiveTimestamp !== "number"
-  ) {
-    throw new Error(`scaledUiAmountConfig on ${mint} is missing multiplier fields`);
-  }
-  return operativeMultiplier(
-    state.multiplier,
-    state.newMultiplier,
-    state.newMultiplierEffectiveTimestamp,
-    Math.floor(Date.now() / 1000),
-  );
 }
 
 interface HermesPrice {
@@ -137,24 +89,9 @@ export async function readPythFair(ticker: string): Promise<PythFair> {
 
   const market = await loadMarket();
   const xstock = findXstockReserve(market, entitled.equity);
-  const usdc = findUsdcReserve(market);
   const xDecimals = Number(xstock.state.liquidity.mintDecimals.toString());
-  const usdcDecimals = Number(usdc.state.liquidity.mintDecimals.toString());
   const mint = xstock.getLiquidityMint().toString();
-  const multiplier = await readOperativeMultiplier(mint);
-  const rawAmount = BigInt(Math.max(1, Math.round(10 ** xDecimals / multiplier)));
-  const displayedShares = Number(rawAmount) / 10 ** xDecimals * multiplier;
-  const quote = await getQuote({
-    inputMint: mint,
-    outputMint: USDC_MINT,
-    amount: rawAmount,
-    slippageBps: 100,
-  });
-  const usdcOut = Number(quote.outAmount) / 10 ** usdcDecimals;
-  if (!Number.isFinite(usdcOut) || usdcOut <= 0) {
-    throw new Error(`Jupiter quote returned no output amount for ${canonical}`);
-  }
-  const jupiterSellPrice = usdcOut / displayedShares;
+  const { jupiterSellPrice } = await readXstockLivePrice(mint, xDecimals);
   const gapBps = (jupiterSellPrice / pythPrice - 1) * 10000;
 
   return {

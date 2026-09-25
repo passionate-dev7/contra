@@ -10,3 +10,4 @@ test-ledger
 research/
 docs/
 packages/*/out/
+.progress/

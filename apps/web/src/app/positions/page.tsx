@@ -4,7 +4,7 @@ import { ArrowSquareOut, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { readObligation } from "@/lib/obligation";
 import { fmtUsd, fmtPct, fmtNum, shortAddr } from "@/lib/format";
 import { OwnerForm } from "@/components/OwnerForm";
-import { CloseButton } from "@/components/CloseButton";
+import { ShortCard } from "@/components/ShortCard";
 
 export const revalidate = 0;
 
@@ -84,7 +84,6 @@ async function ObligationSection({ owner }: { owner: string }) {
     );
   }
 
-  const primaryBorrow = view.borrows.find((b) => /x$/.test(b.symbol));
   const usdcDeposit = view.deposits.find((d) => d.symbol === "USDC");
 
   return (
@@ -121,18 +120,18 @@ async function ObligationSection({ owner }: { owner: string }) {
         <div className={`mt-3 rounded-[var(--radius-ticket)] border p-3 text-sm ${view.healthy ? "border-[var(--positive)] text-[var(--positive)]" : "border-[var(--negative)] text-[var(--negative)]"}`}>
           {view.healthy ? "Position is above its liquidation LTV." : "Position is at or past its liquidation LTV."}
         </div>
-        {view.liquidationPriceUsd !== null && view.liquidationTicker !== null && (
-          <p className="mt-3 font-[family-name:var(--font-mono)] text-sm tabular">
-            Liquidation price ({view.liquidationTicker}): {fmtUsd(view.liquidationPriceUsd)}
+
+        {view.shorts.length === 0 ? (
+          <p className="mt-5 border-t border-[var(--rule)] pt-4 text-sm text-[var(--ink-dim)]">
+            No xStock borrow against USDC collateral to close here.
           </p>
+        ) : (
+          <div className="mt-5 space-y-4 border-t border-[var(--rule)] pt-4">
+            {view.shorts.map((s) => (
+              <ShortCard key={s.reserveAddress} owner={owner} short={s} usdcDeposit={usdcDeposit} />
+            ))}
+          </div>
         )}
-        <div className="mt-5 border-t border-[var(--rule)] pt-4">
-          {primaryBorrow && usdcDeposit ? (
-            <CloseButton owner={owner} borrow={primaryBorrow} deposit={usdcDeposit} />
-          ) : (
-            <p className="text-sm text-[var(--ink-dim)]">No xStock borrow against USDC collateral to close here.</p>
-          )}
-        </div>
       </aside>
     </div>
   );
