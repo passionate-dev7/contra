@@ -77,36 +77,48 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   return (
     <div className="min-h-[100dvh] bg-[var(--paper)]">
-      <header className="border-b border-[var(--rule)]">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-2 px-6 py-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <header className="border-b border-[var(--rule)] bg-[var(--paper-raised)]">
+        <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-6 py-5 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+          <div className="min-w-0">
             <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Contra</h1>
             <p className="mt-1 max-w-md text-sm text-[var(--ink-dim)]">
               Short a tokenized US stock in one transaction: deposit USDC on Kamino, borrow the xStock, sell it through Jupiter.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <Link href="/hedge" className="press-scale whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">
+
+          <div className="flex items-stretch divide-x divide-[var(--rule)] border-y border-[var(--rule)] py-3 lg:border-y-0 lg:border-x lg:px-8 lg:py-1">
+            <div className="flex flex-1 flex-col justify-center px-4 first:pl-0 lg:px-6">
+              <span className="font-[family-name:var(--font-display)] text-2xl font-semibold tabular leading-none">
+                {`${borrowableCount} of ${xstocks.length}`}
+              </span>
+              <span className="mt-1 text-[11px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">xStocks shortable now</span>
+            </div>
+            <div className="flex flex-1 flex-col justify-center px-4 last:pr-0 lg:px-6">
+              <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-display)] text-2xl font-semibold leading-none">
+                <span className={`pulse-dot h-2 w-2 shrink-0 rounded-full ${marketOpen ? "bg-[var(--positive)]" : "bg-[var(--negative)]"}`} />
+                {`US market ${marketOpen ? "open" : "closed"}`}
+              </span>
+              <span className="mt-1 block text-[11px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">
+                {marketError ? "state unavailable" : "SPY feed, live"}
+              </span>
+            </div>
+          </div>
+
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm lg:flex-col lg:items-end lg:gap-1">
+            <Link href="/hedge" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
               Hedge a holding
             </Link>
-            <Link href="/positions" className="press-scale whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">
+            <Link href="/positions" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
               View a position
             </Link>
+          </nav>
+        </div>
+        {marketError && (
+          <div className="border-t border-[var(--rule)] bg-[var(--negative)]/5 px-6 py-2 text-center text-xs text-[var(--negative)]">
+            Market state unavailable: {marketError}
           </div>
-        </div>
+        )}
       </header>
-
-      <div className="border-b border-[var(--rule)] bg-[var(--paper-raised)]">
-        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 font-[family-name:var(--font-mono)] text-sm tabular">
-          <span className="inline-flex items-center gap-2">
-            <span className={`pulse-dot h-2 w-2 rounded-full ${marketOpen ? "bg-[var(--positive)]" : "bg-[var(--negative)]"}`} />
-            <span>{`US market ${marketOpen ? "open" : "closed"}`}</span>
-          </span>
-          <span className="text-[var(--rule-strong)]">·</span>
-          <span>{`${borrowableCount} of ${xstocks.length} xStocks can be shorted right now`}</span>
-          {marketError && <span className="text-[var(--negative)]">Market state unavailable: {marketError}</span>}
-        </div>
-      </div>
 
       <main className="mx-auto max-w-[1180px] px-6 py-8">
         {loadError ? (

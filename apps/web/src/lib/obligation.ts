@@ -178,8 +178,11 @@ export async function readObligation(owner: string): Promise<ObligationView | nu
     shorts,
     totalDepositUsd: stats.userTotalDeposit.toNumber(),
     totalBorrowUsd: stats.userTotalBorrow.toNumber(),
-    loanToValuePct: stats.loanToValue.toNumber(),
-    liquidationLtvPct: stats.liquidationLtv.toNumber(),
+    // klend-sdk's stats.loanToValue / stats.liquidationLtv are 0-1 fractions;
+    // scale to 0-100 here so every consumer of this *Pct field gets an actual
+    // percent, matching the convention reserves.ts uses for pairMaxLtv/pairLiqLtv.
+    loanToValuePct: stats.loanToValue.toNumber() * 100,
+    liquidationLtvPct: stats.liquidationLtv.toNumber() * 100,
     liquidationPriceUsd: primaryShort?.liquidationPriceUsd ?? null,
     liquidationTicker: primaryShort?.symbol ?? null,
     healthy: stats.loanToValue.lt(stats.liquidationLtv),

@@ -35,30 +35,46 @@ export default async function HedgePage({ searchParams }: { searchParams: Promis
 async function HedgeContent({ wallet }: { wallet: string }) {
   if (!wallet) {
     return (
-      <section className="border border-[var(--rule-strong)] bg-[var(--paper-raised)] p-6 sm:p-8">
-        <div className="text-center">
-          <h2 className="font-[family-name:var(--font-display)] text-xl">Choose a wallet</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--ink-dim)]">Add a Solana wallet address to read its xStock holdings.</p>
-        </div>
-        <form action="/hedge" method="get" className="mx-auto mt-6 flex max-w-xl flex-col gap-2 sm:flex-row">
-          <label htmlFor="hedge-wallet" className="sr-only">Solana wallet address</label>
-          <input
-            id="hedge-wallet"
-            name="wallet"
-            type="text"
-            required
-            autoComplete="off"
-            placeholder="Wallet address"
-            className="min-w-0 flex-1 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] bg-[var(--paper)] px-3 py-2 font-[family-name:var(--font-mono)] text-sm"
-          />
-          <button type="submit" className="press-scale rounded-[var(--radius-ticket)] bg-[var(--accent)] px-4 py-2 font-medium text-[var(--accent-ink)]">
-            Read holdings
-          </button>
-        </form>
-        <div className="mt-5 text-center">
-          <Link href="/" className="press-scale inline-flex whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">Open the ticket</Link>
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
+        <section className="order-2 border border-[var(--rule-strong)] bg-[var(--paper-raised)] p-5 lg:order-1">
+          <h2 className="font-[family-name:var(--font-display)] text-lg">How the hedge desk works</h2>
+          <ol className="mt-4 space-y-4 text-sm text-[var(--ink-dim)]">
+            <li className="flex gap-3">
+              <span className="font-[family-name:var(--font-mono)] text-[var(--accent)]">01</span>
+              <span>Read every positive xStock (Token-2022) balance sitting in the wallet, live from the RPC.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-[family-name:var(--font-mono)] text-[var(--accent)]">02</span>
+              <span>Rank holdings by market value and size a Kamino short against the largest borrowable one.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-[family-name:var(--font-mono)] text-[var(--accent)]">03</span>
+              <span>Hand the sized ticket to <Link href="/" className="press-scale text-[var(--accent)] underline underline-offset-2">the order ticket</Link>, prefilled and ready to open.</span>
+            </li>
+          </ol>
+        </section>
+
+        <section className="order-1 border border-[var(--rule-strong)] bg-[var(--paper-raised)] p-5 lg:order-2">
+          <h2 className="font-[family-name:var(--font-display)] text-lg">Read a wallet</h2>
+          <p className="mt-1 text-sm text-[var(--ink-dim)]">Paste a Solana address to pull its xStock holdings.</p>
+          <form action="/hedge" method="get" className="mt-4 flex flex-col gap-2">
+            <label htmlFor="hedge-wallet" className="sr-only">Solana wallet address</label>
+            <input
+              id="hedge-wallet"
+              name="wallet"
+              type="text"
+              required
+              autoComplete="off"
+              placeholder="Wallet address"
+              className="min-w-0 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] bg-[var(--paper)] px-3 py-2 font-[family-name:var(--font-mono)] text-sm"
+            />
+            <button type="submit" className="press-scale rounded-[var(--radius-ticket)] bg-[var(--accent)] px-4 py-2.5 font-medium text-[var(--accent-ink)]">
+              Read holdings
+            </button>
+          </form>
+          <Link href="/" className="press-scale mt-4 inline-flex whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">Open the ticket instead</Link>
+        </section>
+      </div>
     );
   }
 
@@ -84,16 +100,46 @@ async function HedgeContent({ wallet }: { wallet: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--ink-dim)]">
-        <span>Wallet</span>
-        <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-[var(--accent)] underline">
-          {shortAddr(wallet, 6, 6)}
-          <ArrowSquareOut size={12} weight="bold" aria-hidden="true" />
-        </a>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="order-2 space-y-6 lg:order-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--ink-dim)]">
+          <span>Wallet</span>
+          <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-[var(--accent)] underline">
+            {shortAddr(wallet, 6, 6)}
+            <ArrowSquareOut size={12} weight="bold" aria-hidden="true" />
+          </a>
+        </div>
+        <HoldingsTable holdings={analysis.holdings} />
+        <SuggestionCard plan={analysis.plan} fallbackReason={analysis.suggestion.reason} />
       </div>
-      <HoldingsTable holdings={analysis.holdings} />
-      <SuggestionCard plan={analysis.plan} fallbackReason={analysis.suggestion.reason} />
+
+      <aside className="order-1 space-y-6 lg:order-2 lg:sticky lg:top-6 lg:self-start">
+        <section className="border border-[var(--rule-strong)] bg-[var(--paper-raised)] p-5">
+          <h2 className="font-[family-name:var(--font-display)] text-base">Check another wallet</h2>
+          <form action="/hedge" method="get" className="mt-3 flex flex-col gap-2">
+            <label htmlFor="hedge-wallet-2" className="sr-only">Solana wallet address</label>
+            <input
+              id="hedge-wallet-2"
+              name="wallet"
+              type="text"
+              required
+              autoComplete="off"
+              defaultValue={wallet}
+              className="min-w-0 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] bg-[var(--paper)] px-3 py-2 font-[family-name:var(--font-mono)] text-sm"
+            />
+            <button type="submit" className="press-scale rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] px-3 py-2 text-sm font-medium">
+              Read holdings
+            </button>
+          </form>
+        </section>
+        <section className="border border-[var(--rule-strong)] bg-[var(--paper-raised)] p-5">
+          <h2 className="font-[family-name:var(--font-display)] text-base">How this is sized</h2>
+          <p className="mt-2 text-sm text-[var(--ink-dim)]">
+            The suggested hedge shorts half of the largest borrowable holding, sized to the live Kamino max LTV for that
+            pair. Adjust size and collateral freely once it opens in the ticket.
+          </p>
+        </section>
+      </aside>
     </div>
   );
 }

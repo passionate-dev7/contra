@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
-import { ArrowSquareOut, CircleNotch, Wallet as WalletIcon, WarningCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, CircleNotch, ShieldCheck, Wallet as WalletIcon, WarningCircle } from "@phosphor-icons/react";
 import { fmtPct, fmtUsd, fmtNum, shortAddr, uiToRaw } from "@/lib/format";
 import { canonicalXstockSymbol, type PythFair } from "@/lib/pyth-shared";
 import { PythLine } from "@/components/PythLine";
@@ -11,6 +11,12 @@ import { listSolanaWallets, connectWallet, signAndSendAll } from "@/lib/wallet";
 import type { PublicReserveRow } from "@/lib/types";
 
 type Status = "idle" | "connecting" | "building" | "awaiting-signature" | "sending" | "done" | "error";
+
+// packages/short/src/build.ts:buildOpenShort passes no slippageBps override to
+// getQuote, so the Jupiter leg always quotes at the 100 bps (1%) default. The
+// Lighthouse postcondition then requires the owner's USDC balance to land at
+// or above that quoted minimum, or the whole transaction reverts on-chain.
+const OPEN_SLIPPAGE_BPS = 100;
 
 type TicketProps = {
   rows: PublicReserveRow[];
@@ -198,10 +204,22 @@ export function Ticket({
         )}
 
         {selected && (
-          <PythLine
-            ticker={canonicalXstockSymbol(selected.symbol)}
-            initial={initialPyth !== undefined && initialPyth !== null ? initialPyth : null}
-          />
+          <div className="space-y-1.5 border border-[var(--rule)] bg-[var(--paper)] p-3">
+            <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">
+              <ShieldCheck size={13} weight="fill" aria-hidden="true" className="text-[var(--positive)]" />
+              On-chain guarantees
+            </p>
+            <PythLine
+              ticker={canonicalXstockSymbol(selected.symbol)}
+              initial={initialPyth !== undefined && initialPyth !== null ? initialPyth : null}
+            />
+            <p className="font-[family-name:var(--font-mono)] text-xs tabular text-[var(--ink-dim)]">
+              Guarded: reverts on-chain if you receive less than{" "}
+              {Number(sizeUsd) > 0 ? fmtUsd((Number(sizeUsd) * (10_000 - OPEN_SLIPPAGE_BPS)) / 10_000) : "-"} for the sale
+              ({(OPEN_SLIPPAGE_BPS / 100).toFixed(0)}% max slippage, enforced by a Lighthouse assertion in the same
+              transaction).
+            </p>
+          </div>
         )}
 
         {selected && !selected.oracleValid && (

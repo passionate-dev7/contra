@@ -44,7 +44,7 @@ export function ShortCard({ owner, short, usdcDeposit }: { owner: string; short:
         )}
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-y-1.5 font-[family-name:var(--font-mono)] text-sm tabular sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 font-[family-name:var(--font-mono)] text-sm tabular">
         <dt className="text-[var(--ink-dim)]">Borrowed</dt>
         <dd className="text-right">
           {fmtNum(short.displayedAmount, 6)} {short.symbol}

@@ -1,11 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowClockwise, CheckCircle, WarningCircle } from "@phosphor-icons/react";
-import { fmtPct, fmtNum } from "@/lib/format";
+import { fmtPct, fmtNum, fmtUsd } from "@/lib/format";
 import type { PublicReserveRow } from "@/lib/types";
 
 type FetchState = "idle" | "loading" | "error";
+
+/** Snapshot stats derived entirely from already-fetched reserve rows: the
+ * borrow APY spread and the total available liquidity across borrowable
+ * xStocks, priced at each reserve's own oracle. Nothing here is a separate
+ * fetch or a fabricated figure. */
+function snapshot(xstocks: PublicReserveRow[]) {
+  const borrowable = xstocks.filter((r) => r.borrowable);
+  if (borrowable.length === 0) return null;
+  const apys = borrowable.map((r) => r.borrowApy * 100);
+  const liquidityUsd = borrowable.reduce((sum, r) => {
+    if (r.priceUsd === null) return sum;
+    return sum + (Number(r.availableRaw) / 10 ** r.decimals) * r.priceUsd;
+  }, 0);
+  return { minApy: Math.min(...apys), maxApy: Math.max(...apys), liquidityUsd };
+}
 
 export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
   const [rows, setRows] = useState(initialRows);
@@ -31,6 +46,7 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
   }
 
   const xstocks = rows.filter((r) => r.isXstock);
+  const stats = useMemo(() => snapshot(xstocks), [xstocks]);
 
   return (
     <section aria-busy={state === "loading"} className="order-2 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] bg-[var(--paper-raised)] lg:order-1">
@@ -46,6 +62,19 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
           Refresh
         </button>
       </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 divide-x divide-[var(--rule)] border-b border-[var(--rule)] font-[family-name:var(--font-mono)] tabular sm:grid-cols-2">
+          <div className="px-4 py-3">
+            <div className="text-base font-medium">{fmtPct(stats.minApy)} - {fmtPct(stats.maxApy)}</div>
+            <div className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[var(--ink-dim)] font-[family-name:var(--font-body)]">Borrow APY range</div>
+          </div>
+          <div className="px-4 py-3">
+            <div className="text-base font-medium">{fmtUsd(stats.liquidityUsd, 0)}</div>
+            <div className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[var(--ink-dim)] font-[family-name:var(--font-body)]">Available to borrow</div>
+          </div>
+        </div>
+      )}
 
       {state === "error" && (
         <div role="alert" className="flex items-start gap-2 border-b border-[var(--rule)] bg-[var(--negative)]/5 px-4 py-3 text-sm text-[var(--negative)]">
@@ -72,17 +101,24 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
           <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-[var(--rule)] text-left text-xs uppercase tracking-wide text-[var(--ink-dim)]">
-                <th scope="col" className="w-[22%] px-2 py-2 font-medium sm:px-4">Symbol</th>
-                <th scope="col" className="w-[22%] px-2 py-2 text-right font-medium sm:px-4">Borrow factor</th>
-                <th scope="col" className="hidden w-[18%] px-4 py-2 text-right font-medium sm:table-cell">Borrow APY</th>
-                <th scope="col" className="hidden w-[18%] px-4 py-2 text-right font-medium md:table-cell">Available</th>
-                <th scope="col" className="w-[20%] px-2 py-2 text-right font-medium sm:px-4">Status</th>
+                <th scope="col" className="w-[18%] px-2 py-2 font-medium sm:px-4">Symbol</th>
+                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium sm:table-cell">Mark</th>
+                <th scope="col" className="w-[18%] px-2 py-2 text-right font-medium sm:px-4">Borrow factor</th>
+                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium sm:table-cell">Borrow APY</th>
+                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium md:table-cell">Available</th>
+                <th scope="col" className="w-[16%] px-2 py-2 text-right font-medium sm:px-4">Status</th>
               </tr>
             </thead>
             <tbody className="font-[family-name:var(--font-mono)] tabular">
               {xstocks.map((r) => (
                 <tr key={r.symbol} className="border-b border-[var(--rule)] last:border-0">
                   <th scope="row" className="min-w-0 px-2 py-2.5 text-left font-[family-name:var(--font-body)] font-medium sm:px-4">{r.symbol}</th>
+                  <td className="hidden px-4 py-2.5 text-right sm:table-cell">
+                    {r.priceUsd !== null ? fmtUsd(r.priceUsd) : "-"}
+                    {!r.oracleValid && (
+                      <WarningCircle size={12} weight="fill" aria-hidden="true" className="ml-1 inline text-[var(--negative)]" />
+                    )}
+                  </td>
                   <td className="px-2 py-2.5 text-right sm:px-4">{r.borrowFactor !== null ? `${Math.round(r.borrowFactor * 100)}%` : "-"}</td>
                   <td className="hidden px-4 py-2.5 text-right sm:table-cell">{fmtPct(r.borrowApy * 100)}</td>
                   <td className="hidden px-4 py-2.5 text-right md:table-cell">{fmtNum(Number(r.availableRaw) / 10 ** r.decimals, 2)}</td>

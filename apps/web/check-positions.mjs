@@ -85,4 +85,20 @@ await withApp("@contra/web", PORT, async (get) => {
     throw new Error(`GREEN expected: /positions page must render ${onChain.symbol} for ${OWNER}`);
   }
   console.log(`green case ok: /positions page renders the ${onChain.symbol} short for ${OWNER}`);
+
+  // Regression guard: obligation.ts's loanToValuePct/liquidationLtvPct are
+  // 0-100 percents, not 0-1 fractions. A caller that forgets to scale renders
+  // "0.64%" instead of "64%" -- catch that here, not just eyeball it.
+  const ltvMatch = html.match(/\bLTV\s*(\d+(?:\.\d+)?)%/i);
+  if (!ltvMatch) throw new Error("GREEN expected: /positions must render an LTV percent");
+  const ltvPct = Number(ltvMatch[1]);
+  if (!(ltvPct >= 1 && ltvPct <= 100)) {
+    throw new Error(`GREEN expected: LTV must render as a real percent between 1 and 100, got ${ltvPct}% (an unscaled 0-1 fraction would show up here as < 1)`);
+  }
+  console.log(`green case ok: LTV renders as ${ltvPct}%, not a raw 0-1 fraction`);
+
+  if (!/Healthy: LTV \d+(?:\.\d+)?% is below the \d+(?:\.\d+)?% liquidation threshold|Near liquidation: LTV|at or past its liquidation LTV/.test(html)) {
+    throw new Error("GREEN expected: /positions must render the health wording (Healthy: LTV .../ Near liquidation: .../ at or past its liquidation LTV)");
+  }
+  console.log("green case ok: health wording present");
 });

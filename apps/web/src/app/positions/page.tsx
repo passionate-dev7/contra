@@ -25,16 +25,44 @@ export default async function PositionsPage({ searchParams }: { searchParams: Pr
       </header>
 
       <main className="mx-auto max-w-[1180px] px-6 py-8">
-        <div className="mb-6">
-          <OwnerForm initial={owner} />
-        </div>
-
         {!owner ? (
-          <p className="rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] p-8 text-center text-sm text-[var(--ink-dim)]">
-            Enter a wallet address to view its obligation on the xStocks market.
-          </p>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+            <section className="order-2 border border-[var(--rule-strong)] bg-[var(--paper-raised)] rounded-[var(--radius-ticket)] p-5 lg:order-1">
+              <h2 className="font-[family-name:var(--font-display)] text-lg">What this page shows</h2>
+              <dl className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium">Deposits &amp; borrows</dt>
+                  <dd className="mt-1 text-[var(--ink-dim)]">Every line in the obligation, read live from the Kamino market.</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">LTV &amp; liquidation</dt>
+                  <dd className="mt-1 text-[var(--ink-dim)]">Current loan-to-value against the liquidation threshold, so health is never a guess.</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">Two independent marks</dt>
+                  <dd className="mt-1 text-[var(--ink-dim)]">Kamino&apos;s oracle mark next to a live Jupiter quote, with the gap called out.</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">Close in one click</dt>
+                  <dd className="mt-1 text-[var(--ink-dim)]">Buy back through Jupiter, repay, and withdraw collateral in a single guarded transaction.</dd>
+                </div>
+              </dl>
+            </section>
+            <aside className="order-1 border border-[var(--rule-strong)] bg-[var(--paper-raised)] rounded-[var(--radius-ticket)] p-5 lg:order-2 lg:sticky lg:top-6 lg:self-start">
+              <h2 className="font-[family-name:var(--font-display)] text-lg">Look up an owner</h2>
+              <p className="mt-1 text-sm text-[var(--ink-dim)]">Enter a wallet address to view its obligation on the xStocks market.</p>
+              <div className="mt-4">
+                <OwnerForm initial={owner} />
+              </div>
+            </aside>
+          </div>
         ) : (
-          <ObligationSection owner={owner} />
+          <>
+            <div className="mb-6">
+              <OwnerForm initial={owner} />
+            </div>
+            <ObligationSection owner={owner} />
+          </>
         )}
       </main>
     </div>
@@ -85,6 +113,15 @@ async function ObligationSection({ owner }: { owner: string }) {
   }
 
   const usdcDeposit = view.deposits.find((d) => d.symbol === "USDC");
+  // Warning style fires at or past liquidation, or within 5 LTV points of it
+  // (still technically healthy but close enough to call out).
+  const ltvGapPts = view.liquidationLtvPct - view.loanToValuePct;
+  const atRisk = !view.healthy || ltvGapPts <= 5;
+  const healthText = !view.healthy
+    ? "Position is at or past its liquidation LTV."
+    : atRisk
+      ? `Near liquidation: LTV ${fmtPct(view.loanToValuePct)} is within ${ltvGapPts.toFixed(1)} points of the ${fmtPct(view.liquidationLtvPct)} liquidation threshold.`
+      : `Healthy: LTV ${fmtPct(view.loanToValuePct)} is below the ${fmtPct(view.liquidationLtvPct)} liquidation threshold.`;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
@@ -103,13 +140,13 @@ async function ObligationSection({ owner }: { owner: string }) {
         <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg">Borrows</h2>
         <PositionTable lines={view.borrows} />
 
-        <dl className="mt-6 grid grid-cols-2 gap-y-1.5 border-t border-[var(--rule)] pt-4 text-sm font-[family-name:var(--font-mono)] tabular sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-x-5 gap-y-1.5 border-t border-[var(--rule)] pt-4 text-sm font-[family-name:var(--font-mono)] tabular sm:grid-cols-4">
           <dt className="text-[var(--ink-dim)]">Deposits</dt>
           <dd className="text-right">{fmtUsd(view.totalDepositUsd)}</dd>
           <dt className="text-[var(--ink-dim)]">Borrows</dt>
           <dd className="text-right">{fmtUsd(view.totalBorrowUsd)}</dd>
           <dt className="text-[var(--ink-dim)]">LTV</dt>
-          <dd className={`text-right ${view.healthy ? "" : "text-[var(--negative)]"}`}>{fmtPct(view.loanToValuePct)}</dd>
+          <dd className={`text-right ${atRisk ? "text-[var(--negative)]" : ""}`}>{fmtPct(view.loanToValuePct)}</dd>
           <dt className="text-[var(--ink-dim)]">Liquidation LTV</dt>
           <dd className="text-right">{fmtPct(view.liquidationLtvPct)}</dd>
         </dl>
@@ -117,8 +154,8 @@ async function ObligationSection({ owner }: { owner: string }) {
 
       <aside className="border border-[var(--rule-strong)] bg-[var(--paper-raised)] rounded-[var(--radius-ticket)] p-5 lg:sticky lg:top-6 lg:self-start">
         <h2 className="font-[family-name:var(--font-display)] text-lg">Health</h2>
-        <div className={`mt-3 rounded-[var(--radius-ticket)] border p-3 text-sm ${view.healthy ? "border-[var(--positive)] text-[var(--positive)]" : "border-[var(--negative)] text-[var(--negative)]"}`}>
-          {view.healthy ? "Position is above its liquidation LTV." : "Position is at or past its liquidation LTV."}
+        <div className={`mt-3 rounded-[var(--radius-ticket)] border p-3 text-sm ${atRisk ? "border-[var(--negative)] text-[var(--negative)]" : "border-[var(--positive)] text-[var(--positive)]"}`}>
+          {healthText}
         </div>
 
         {view.shorts.length === 0 ? (
