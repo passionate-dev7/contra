@@ -16,6 +16,9 @@ importers:
       '@contra/short':
         specifier: workspace:*
         version: link:../../packages/short
+      '@fineprint/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@fineprint/exec':
         specifier: workspace:*
         version: link:../../packages/exec

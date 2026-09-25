@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
 import { readReserveRows, readMarketOpenState, toPublicRow } from "@/lib/reserves";
+import { readPythFair, type PythFair } from "@/lib/pyth-fair";
 import { Blotter } from "@/components/Blotter";
 import { Ticket } from "@/components/Ticket";
 
@@ -57,6 +58,23 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const borrowableCount = xstocks.filter((r) => r.borrowable).length;
   const pythKeyPresent = Boolean(process.env.PYTH_API_KEY?.trim());
 
+  // Server-render the fair-value line for the ticket's default ticker so the
+  // first paint already shows the Pyth price and the gap in bps. Bounded so a
+  // slow quote never holds the page; the ticket refetches on ticker change.
+  const ssrTicker =
+    initialTicker ?? xstocks.find((r) => r.borrowable)?.symbol ?? xstocks[0]?.symbol ?? null;
+  let initialPyth: PythFair | null = null;
+  if (ssrTicker !== null) {
+    try {
+      initialPyth = await Promise.race([
+        readPythFair(ssrTicker),
+        new Promise<PythFair | null>((resolve) => setTimeout(() => resolve(null), 12_000)),
+      ]);
+    } catch {
+      initialPyth = null;
+    }
+  }
+
   return (
     <div className="min-h-[100dvh] bg-[var(--paper)]">
       <header className="border-b border-[var(--rule)]">
@@ -106,6 +124,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               rows={rows}
               marketOpen={marketOpen}
               pythKeyPresent={pythKeyPresent}
+              initialPyth={initialPyth}
               initialTicker={initialTicker}
               initialSizeUsd={initialSizeUsd}
               initialCollateralUsdc={initialCollateralUsdc}

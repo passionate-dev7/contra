@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
 import { ArrowSquareOut, CircleNotch, Wallet as WalletIcon, WarningCircle } from "@phosphor-icons/react";
 import { fmtPct, fmtUsd, fmtNum, shortAddr, uiToRaw } from "@/lib/format";
+import { canonicalXstockSymbol, type PythFair } from "@/lib/pyth-shared";
+import { PythLine } from "@/components/PythLine";
 import { computeTicketMath } from "@/lib/ticket-math";
 import { listSolanaWallets, connectWallet, signAndSendAll } from "@/lib/wallet";
 import type { PublicReserveRow } from "@/lib/types";
@@ -19,6 +21,7 @@ type TicketProps = {
   initialCollateralUsdc?: string;
   initialBorrowRaw?: string;
   initialCollateralRaw?: string;
+  initialPyth?: PythFair | null;
 };
 
 export function Ticket({
@@ -30,6 +33,7 @@ export function Ticket({
   initialCollateralUsdc,
   initialBorrowRaw,
   initialCollateralRaw,
+  initialPyth,
 }: TicketProps) {
   const xstocks = useMemo(() => rows.filter((r) => r.isXstock), [rows]);
   const firstBorrowable = xstocks.find((r) => r.borrowable);
@@ -191,6 +195,13 @@ export function Ticket({
           <p className="text-center text-xs text-[var(--ink-dim)]">
             USDC collateral: max LTV {fmtPct(usdcRow.maxLtv, 0)}, liquidation {fmtPct(usdcRow.liqLtv, 0)}
           </p>
+        )}
+
+        {selected && (
+          <PythLine
+            ticker={canonicalXstockSymbol(selected.symbol)}
+            initial={initialPyth !== undefined && initialPyth !== null ? initialPyth : null}
+          />
         )}
 
         {selected && !selected.oracleValid && (
