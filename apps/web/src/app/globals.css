@@ -102,3 +102,185 @@ h3 {
     transform: scale(1);
   }
 }
+
+/* Docs: markdown rendered as a ledger page. */
+.doc-side-link {
+  border-color: transparent;
+  color: var(--ink-dim);
+}
+.doc-side-link:hover {
+  color: var(--accent);
+}
+.doc-side-link[aria-current="page"] {
+  border-color: var(--accent);
+  color: var(--ink);
+  font-weight: 500;
+}
+.doc-drawer > summary {
+  list-style: none;
+}
+.doc-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+.doc-drawer[open] .doc-drawer-caret {
+  transform: rotate(180deg);
+}
+.doc-pager:hover {
+  background: var(--paper-raised);
+}
+
+.doc-prose {
+  font-size: 15.5px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.doc-prose > * + * {
+  margin-top: 1rem;
+}
+.doc-prose h2,
+.doc-prose h3 {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.25;
+  scroll-margin-top: 1.5rem;
+}
+.doc-prose h2 {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule-strong);
+  font-size: 1.625rem;
+}
+.doc-prose h3 {
+  margin-top: 2rem;
+  font-size: 1.25rem;
+}
+.doc-prose .doc-anchor {
+  margin-right: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 400;
+  color: var(--rule-strong);
+  text-decoration: none;
+}
+.doc-prose h2:hover .doc-anchor,
+.doc-prose h3:hover .doc-anchor,
+.doc-prose .doc-anchor:focus-visible {
+  color: var(--accent);
+}
+.doc-prose :target {
+  background: linear-gradient(transparent 60%, color-mix(in srgb, var(--accent) 16%, transparent) 60%);
+}
+.doc-prose a:not(.doc-anchor) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.doc-prose a:not(.doc-anchor):hover {
+  text-decoration-color: var(--accent);
+}
+.doc-prose strong {
+  font-weight: 600;
+}
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.4rem;
+}
+.doc-prose ul {
+  list-style: square;
+}
+.doc-prose ol {
+  list-style: decimal;
+}
+.doc-prose li + li {
+  margin-top: 0.35rem;
+}
+.doc-prose li::marker {
+  color: var(--accent);
+}
+.doc-prose blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--paper-raised);
+  padding: 0.75rem 1rem;
+  color: var(--ink-dim);
+}
+.doc-prose hr {
+  border: 0;
+  border-top: 3px double var(--rule-strong);
+  margin: 2.5rem 0;
+}
+.doc-prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-ticket);
+  background: var(--paper-raised);
+}
+.doc-prose a > code {
+  color: inherit;
+}
+.doc-code {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-ticket);
+  background: var(--paper-raised);
+  overflow: hidden;
+}
+.doc-code figcaption {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.35rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.doc-code pre {
+  overflow-x: auto;
+  padding: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: normal;
+  /* ledger ruling behind the code */
+  background-image: repeating-linear-gradient(transparent 0 calc(1.6em - 1px), color-mix(in srgb, var(--rule) 45%, transparent) calc(1.6em - 1px) 1.6em);
+  background-position: 0 0.9rem;
+}
+.doc-table {
+  overflow-x: auto;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-ticket);
+}
+.doc-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: normal;
+}
+.doc-table th {
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule-strong);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.doc-table th,
+.doc-table td {
+  padding: 0.55rem 0.8rem;
+  vertical-align: top;
+}
+.doc-table td {
+  min-width: 8rem;
+}
+.doc-table tr + tr td {
+  border-top: 1px solid var(--rule);
+}
+.doc-table td code {
+  overflow-wrap: anywhere;
+}

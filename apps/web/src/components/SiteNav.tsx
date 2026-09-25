@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/", label: "Ticket" },
   { href: "/hedge", label: "Hedge" },
   { href: "/positions", label: "Positions" },
+  { href: "/docs", label: "Docs" },
   { href: "/pitch", label: "Pitch" },
 ];
 
@@ -25,7 +26,7 @@ export function SiteNav() {
         <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-semibold">
           Contra
         </Link>
-        <nav aria-label="Main" className="order-3 flex w-full gap-5 text-sm sm:order-2 sm:w-auto">
+        <nav aria-label="Main" className="order-3 flex w-full flex-wrap gap-x-5 gap-y-1 text-sm sm:order-2 sm:w-auto">
           {LINKS.map((l) => {
             const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
             return (

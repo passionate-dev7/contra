@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sync-docs": "node sync-docs.mjs"
   },
   "dependencies": {
     "@contra/short": "workspace:*",
@@ -20,6 +21,7 @@
     "@wallet-standard/app": "^1.1.1",
     "@wallet-standard/base": "^1.1.1",
     "decimal.js": "^10.4.3",
+    "marked": "^18.0.14",
     "next": "15.5.26",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
