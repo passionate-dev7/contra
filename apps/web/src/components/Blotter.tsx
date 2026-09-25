@@ -101,12 +101,12 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
           <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-[var(--rule)] text-left text-xs uppercase tracking-wide text-[var(--ink-dim)]">
-                <th scope="col" className="w-[18%] px-2 py-2 font-medium sm:px-4">Symbol</th>
-                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium sm:table-cell">Mark</th>
-                <th scope="col" className="w-[18%] px-2 py-2 text-right font-medium sm:px-4">Borrow factor</th>
-                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium sm:table-cell">Borrow APY</th>
-                <th scope="col" className="hidden w-[16%] px-4 py-2 text-right font-medium md:table-cell">Available</th>
-                <th scope="col" className="w-[16%] px-2 py-2 text-right font-medium sm:px-4">Status</th>
+                <th scope="col" className="w-[12%] px-2 py-2 font-medium sm:px-4">Symbol</th>
+                <th scope="col" className="hidden w-[12%] px-4 py-2 text-right font-medium sm:table-cell">Mark</th>
+                <th scope="col" className="w-[14%] px-2 py-2 text-right font-medium sm:px-4">Borrow factor</th>
+                <th scope="col" className="hidden w-[13%] px-4 py-2 text-right font-medium sm:table-cell">Borrow APY</th>
+                <th scope="col" className="hidden w-[13%] px-4 py-2 text-right font-medium md:table-cell">Available</th>
+                <th scope="col" className="w-[36%] px-2 py-2 text-right font-medium sm:px-4">Status</th>
               </tr>
             </thead>
             <tbody className="font-[family-name:var(--font-mono)] tabular">
@@ -122,7 +122,7 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
                   <td className="px-2 py-2.5 text-right sm:px-4">{r.borrowFactor !== null ? `${Math.round(r.borrowFactor * 100)}%` : "-"}</td>
                   <td className="hidden px-4 py-2.5 text-right sm:table-cell">{fmtPct(r.borrowApy * 100)}</td>
                   <td className="hidden px-4 py-2.5 text-right md:table-cell">{fmtNum(Number(r.availableRaw) / 10 ** r.decimals, 2)}</td>
-                  <td className="px-2 py-2.5 text-right sm:px-4">
+                  <td className="whitespace-nowrap px-2 py-2.5 text-right sm:px-4">
                     {r.borrowable ? (
                       <span className="inline-flex items-center gap-1 text-[var(--positive)]">
                         <CheckCircle size={14} weight="fill" aria-hidden="true" />
