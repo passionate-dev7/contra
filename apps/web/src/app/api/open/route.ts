@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { web3Connection, loadMarket, findUsdcReserve, findXstockReserve, buildOpenShort } from "@contra/short";
+import { web3Connection, loadMarket, findUsdcReserve, findXstockReserve, buildOpenShort, resolveEquityFeed, MarketClosedError } from "@contra/short";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "owner, ticker, usdcCollateral, borrowRaw are required" }, { status: 400 });
   }
   try {
+    const feed = await resolveEquityFeed(baseTicker(ticker));
+    if (!feed.isOpen) throw new MarketClosedError(baseTicker(ticker), feed.nextOpenUnix);
     const market = await loadMarket();
     const usdcReserve = findUsdcReserve(market);
     const xstockReserve = findXstockReserve(market, baseTicker(ticker));
@@ -48,6 +50,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ transactions, route: built.route, reason: built.reason });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
+    const status = err instanceof MarketClosedError ? 409 : 502;
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status });
   }
 }

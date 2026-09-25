@@ -2,6 +2,7 @@
 
 Live: https://contra-sol.vercel.app
 Repo: https://github.com/passionate-dev7/contra
+Developer docs: [docs/README.md](docs/README.md)
 
 Contra is a one-signature short ticket for tokenized US stocks on Solana. Pick a ticker, deposit USDC, and one transaction deposits it as collateral on Kamino, borrows the xStock, and sells it through Jupiter. Closing is the same idea in reverse.
 
@@ -58,7 +59,7 @@ The same pattern covers the Lighthouse postcondition: `packages/short/check-guar
 ## Honest status
 
 - No signed mainnet short has been sent from Contra. Every proof above is `simulateTransaction`, never a submitted transaction, because sending one costs real USDC and the two red tests exist specifically to show the guard rails fire before that point.
-- Opening a short only works during US market hours, because Kamino's Scope crank for these reserves refreshes on that schedule; outside it, `buildOpenShort` throws `MarketClosedError` rather than submit a transaction against a stale oracle.
+- Opening a short only works during US market hours: `/api/open` checks the ticker's Pyth `Equity.US.<T>/USD` market status and returns 409 `MarketClosedError` when it is closed (`apps/web/check-open-gate.mjs` proves it against Hermes). Separately, `buildOpenShort` and `buildCloseShort` throw `MarketClosedError` whenever Kamino's Scope leaves are too old to refresh, rather than submit a transaction against a stale oracle. Closing is not blocked by market hours.
 - Pyth's own live equity price (used for the fair-value cross-check, separate from Kamino's Scope-priced oracle) needs `PYTH_API_KEY` in `.env`; Hermes has required a key on every price-update request since 2026-08-26. Without it, `requireFreshEquityPrice` and `/api/pyth` report the honest reason rather than silently skipping the check or showing a stale number.
 - Kamino's own borrow caps currently allow only 4 of the 10 xStock reserves to be shorted (SPYx, QQQx, TSLAx, NVDAx); the other six have a deployed borrow limit of 0. Contra can't override that, only surface it.
 - Pyth's current trial plan entitles two equity feeds, TSLA and QQQ. The fair-value line on TSLAx and QQQx is a live cross-check; every other xStock (SPYx, NVDAx, and the six with a zero borrow cap) states plainly that no feed is in the current plan.
@@ -86,11 +87,11 @@ Environment: `SOLANA_RPC_URL` (or `RPC_URL`) for a Solana RPC endpoint, `PYTH_AP
 
 - **Liquidation.** A short is a leveraged position: if the xStock's price rises against the USDC collateral, the obligation can be liquidated on Kamino like any other borrow.
 - **Borrow caps.** Six of ten xStock reserves are capped to zero borrow by Kamino today. That can change, but Contra doesn't control it and states the live number rather than a fixed list.
-- **Oracle staleness.** The Scope price chain depends on Chainlink Data Streams and Pyth Lazer cranks that run during US market hours. Outside that window, or if a crank falls behind, opens and closes are blocked by design rather than proceeding on a stale price.
+- **Oracle staleness.** The Scope price chain depends on Chainlink Data Streams and Pyth Lazer cranks that run during US market hours. Outside that window, or if a crank falls behind, opens and closes are blocked once Scope leaves age past the reserve limit rather than proceeding on a stale price; opens are also refused while the US market is closed.
 - **Non-US use only**, stated on the live site's footer. This is a short against tokenized equities, not the underlying security, and it isn't offered to US persons.
 
 ## Tracks entered
 
-**Pyth**: the live `Equity.US.<TICKER>/USD` Hermes feed gates every open and close on market-open state and price freshness before a transaction is built, separate from and in addition to Kamino's own Scope oracle.
+**Pyth**: the live `Equity.US.<TICKER>/USD` Hermes feed gates every open on market-open state before a transaction is built, and supplies the fair-value line against Jupiter's price, separate from and in addition to Kamino's own Scope oracle.
 
 Meteora's DBC/Clawpump track was not entered: shorting an already-liquid, already-tokenized stock has no honest bonding-curve mechanic, and forcing one in would not reflect what the product actually does.
