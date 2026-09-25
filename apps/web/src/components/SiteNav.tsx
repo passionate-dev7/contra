@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/", label: "Ticket" },
   { href: "/hedge", label: "Hedge" },
   { href: "/positions", label: "Positions" },
+  { href: "/agent", label: "Agent" },
   { href: "/docs", label: "Docs" },
   { href: "/pitch", label: "Pitch" },
 ];
