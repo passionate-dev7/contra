@@ -8,6 +8,11 @@ target
 .anchor
 test-ledger
 research/
-docs/
+docs/*
+!docs/README.md
+!docs/tutorials/
+!docs/how-to/
+!docs/explanation/
+!docs/reference/
 packages/*/out/
 .progress/
