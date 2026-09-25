@@ -4,7 +4,7 @@ Live: https://contra-sol.vercel.app
 Repo: https://github.com/passionate-dev7/contra
 Developer docs: [docs/README.md](docs/README.md)
 
-Contra is a one-signature short ticket for tokenized US stocks on Solana. Pick a ticker, deposit USDC, and one transaction deposits it as collateral on Kamino, borrows the xStock, and sells it through Jupiter. Closing is the same idea in reverse.
+Contra is a short ticket for tokenized US stocks on Solana. Pick a ticker, deposit USDC, and one transaction deposits it as collateral on Kamino, borrows the xStock, and sells it through Jupiter. Closing is the same idea in reverse. That is one signature whenever the combined message fits Solana's 1232-byte limit; when a Jupiter route pushes it over, `packages/short/src/build.ts` splits it into two transactions sent in order, and that path is two signatures and not atomic (see below).
 
 ## The problem
 
@@ -21,9 +21,9 @@ The rails exist and carry a live borrow rate on every one of them. Almost nobody
 
 ## What Contra does
 
-**Open a short (one signature).** The order ticket reads Kamino's live reserve config, shows which xStocks are borrowable right now with the reason for the ones that aren't, then builds a single versioned transaction: `deposit_reserve_liquidity_and_obligation_collateral` (USDC in) → `borrow_obligation_liquidity` (the xStock) → a Jupiter swap of that xStock back to USDC, composed from Jupiter's swap-instructions endpoint rather than a pre-built transaction so it fits alongside the Kamino instructions in the same message.
+**Open a short (one signature when it fits).** The order ticket reads Kamino's live reserve config, shows which xStocks are borrowable right now with the reason for the ones that aren't, then builds a single versioned transaction: `deposit_reserve_liquidity_and_obligation_collateral` (USDC in) → `borrow_obligation_liquidity` (the xStock) → a Jupiter swap of that xStock back to USDC, composed from Jupiter's swap-instructions endpoint rather than a pre-built transaction so it fits alongside the Kamino instructions in the same message. If the compiled message exceeds 1232 bytes, the build returns a `secondTransaction`: tx1 is the Kamino deposit and borrow, tx2 is the Jupiter sell plus the Lighthouse guard, sent only after tx1 lands. The wallet signs twice and the two legs are not atomic: if tx2 fails, the borrow stays open and the owner holds the borrowed xStock.
 
-**Close a short (one signature).** Same shape in reverse: buy the xStock back through Jupiter, `repay_obligation_liquidity`, `withdraw_obligation_collateral_and_redeem_reserve_collateral`. Jupiter has no exact-out route for these mints, so the close buys exact-in with a small buffer over the oracle price and checks the quote's minimum-out covers the repay before it ever builds a transaction.
+**Close a short (one signature when it fits).** Same shape in reverse: buy the xStock back through Jupiter, `repay_obligation_liquidity`, `withdraw_obligation_collateral_and_redeem_reserve_collateral`. Jupiter has no exact-out route for these mints, so the close buys exact-in with a small buffer over the oracle price and checks the quote's minimum-out covers the repay before it ever builds a transaction. The same 1232-byte rule applies: a route that does not fit is split into a Jupiter buy-back (tx1) followed by the Scope refresh, repay and withdraw (tx2). A Byreal route was measured over the limit; a Riptide route fit at 1165 bytes.
 
 **Price freshness, not a stale-oracle short.** Kamino prices every xStock reserve through a Scope chain (Chainlink Data Streams and Pyth Lazer feeding derived entries). Before either transaction is built, Contra recomputes how stale the upstream leaves are and prepends a `refresh_price_list` instruction at index 1 (right after the compute-budget instruction, which is the only thing Scope allows before it) covering every derived entry the reserves touch. If the upstream leaves themselves are too old, a fresh in-transaction refresh can't fix that, and building stops with `MarketClosedError` instead of submitting a transaction Kamino would reject with `ReserveStale`.
 
