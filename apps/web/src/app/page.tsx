@@ -111,6 +111,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             <Link href="/positions" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
               View a position
             </Link>
+            <Link href="/pitch" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
+              Pitch
+            </Link>
           </nav>
         </div>
         {marketError && (
