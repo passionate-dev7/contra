@@ -1,16 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Wallet, WalletAccount } from "@wallet-standard/base";
-import { ArrowSquareOut, CircleNotch, ShieldCheck, Wallet as WalletIcon, WarningCircle } from "@phosphor-icons/react";
+import { ArrowSquareOut, CircleNotch, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 import { fmtPct, fmtUsd, fmtNum, shortAddr, uiToRaw } from "@/lib/format";
 import { canonicalXstockSymbol, type PythFair } from "@/lib/pyth-shared";
 import { PythLine } from "@/components/PythLine";
 import { computeTicketMath } from "@/lib/ticket-math";
-import { listSolanaWallets, connectWallet, signAndSendAll } from "@/lib/wallet";
+import { signAndSendAll } from "@/lib/wallet";
+import { useWallet } from "@/components/WalletProvider";
 import type { PublicReserveRow } from "@/lib/types";
 
-type Status = "idle" | "connecting" | "building" | "awaiting-signature" | "sending" | "done" | "error";
+type Status = "idle" | "building" | "awaiting-signature" | "sending" | "done" | "error";
 
 // packages/short/src/build.ts:buildOpenShort passes no slippageBps override to
 // getQuote, so the Jupiter leg always quotes at the 100 bps (1%) default. The
@@ -50,8 +50,7 @@ export function Ticket({
   const [borrowRawOverride, setBorrowRawOverride] = useState<string | undefined>(initialBorrowRaw);
   const [collateralRawOverride, setCollateralRawOverride] = useState<string | undefined>(initialCollateralRaw);
 
-  const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [account, setAccount] = useState<WalletAccount | null>(null);
+  const { wallet, account } = useWallet();
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<string[]>([]);
@@ -81,25 +80,6 @@ export function Ticket({
     !math.overMaxLtv &&
     Number(sizeUsd) > 0 &&
     Number(collateralUsdc) > 0;
-
-  async function handleConnect() {
-    setError(null);
-    setStatus("connecting");
-    try {
-      const wallets = listSolanaWallets();
-      const first = wallets[0];
-      if (first === undefined) {
-        throw new Error("No Solana wallet found. Install a Wallet Standard wallet (Phantom, Backpack, Solflare).");
-      }
-      const acc = await connectWallet(first);
-      setWallet(first);
-      setAccount(acc);
-      setStatus("idle");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setStatus("error");
-    }
-  }
 
   async function handleOpen() {
     if (!selected || !math || !account || !wallet || !usdcRow) return;
@@ -253,15 +233,9 @@ export function Ticket({
             {!busy && "Open short"}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={handleConnect}
-            disabled={status === "connecting"}
-            className="press-scale flex w-full items-center justify-center gap-2 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] px-4 py-2.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <WalletIcon size={16} weight="bold" aria-hidden="true" />
-            {status === "connecting" ? "Connecting…" : "Connect wallet"}
-          </button>
+          <p className="rounded-[var(--radius-ticket)] border border-dashed border-[var(--rule-strong)] px-4 py-2.5 text-center text-sm text-[var(--ink-dim)]">
+            Connect a wallet from the top bar to open this short.
+          </p>
         )}
 
         {account && <p className="text-center text-xs text-[var(--ink-dim)]">Connected as {shortAddr(account.address)}</p>}

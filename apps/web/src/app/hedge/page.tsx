@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowSquareOut, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { fmtNum, fmtPct, fmtUsd, shortAddr } from "@/lib/format";
+import { ConnectedWalletLink } from "@/components/ConnectedWalletLink";
 import { isValidHedgeOwner, readHedge, type HedgeHolding, type HedgePlan } from "@/lib/hedge";
 
 export const revalidate = 0;
@@ -21,7 +22,6 @@ export default async function HedgePage({ searchParams }: { searchParams: Promis
             <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold">Hedge a holding</h1>
             <p className="mt-1 max-w-lg text-sm text-[var(--ink-dim)]">Read the wallet&apos;s xStock balances, then size a Kamino short against the largest borrowable position.</p>
           </div>
-          <Link href="/" className="press-scale whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">Back to ticket</Link>
         </div>
       </header>
 
@@ -72,6 +72,9 @@ async function HedgeContent({ wallet }: { wallet: string }) {
               Read holdings
             </button>
           </form>
+          <div className="mt-3">
+            <ConnectedWalletLink path="/hedge" param="wallet" />
+          </div>
           <Link href="/" className="press-scale mt-4 inline-flex whitespace-nowrap text-sm text-[var(--accent)] underline underline-offset-2">Open the ticket instead</Link>
         </section>
       </div>

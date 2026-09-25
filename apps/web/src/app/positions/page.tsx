@@ -18,9 +18,6 @@ export default async function PositionsPage({ searchParams }: { searchParams: Pr
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">
             <Link href="/">Contra</Link> · Position
           </h1>
-          <Link href="/" className="press-scale text-sm text-[var(--accent)] underline underline-offset-2">
-            Open a short
-          </Link>
         </div>
       </header>
 

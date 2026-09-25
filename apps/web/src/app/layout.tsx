@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { WalletProvider } from "@/components/WalletProvider";
+import { SiteNav } from "@/components/SiteNav";
 
 const spectral = localFont({
   src: [
@@ -38,7 +40,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${spectral.variable} ${workSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <WalletProvider>
+          <SiteNav />
+          {children}
+        </WalletProvider>
+      </body>
     </html>
   );
 }

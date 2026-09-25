@@ -3,29 +3,24 @@
 import { useState } from "react";
 import { ArrowSquareOut, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 import { shortAddr, uiToRaw } from "@/lib/format";
-import { listSolanaWallets, connectWallet, signAndSendAll } from "@/lib/wallet";
+import { signAndSendAll } from "@/lib/wallet";
+import { useWallet } from "@/components/WalletProvider";
 import type { PositionLine } from "@/lib/obligation";
 
-type Status = "idle" | "connecting" | "building" | "sending" | "done" | "error";
+type Status = "idle" | "building" | "sending" | "done" | "error";
 
 export function CloseButton({ owner, borrow, deposit }: { owner: string; borrow: PositionLine; deposit: PositionLine }) {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<string[]>([]);
+  const { wallet, account } = useWallet();
+  const ownerMismatch = account !== null && account.address !== owner;
 
   async function handleClose() {
+    if (!wallet || !account || ownerMismatch) return;
     setError(null);
-    setStatus("connecting");
+    setStatus("building");
     try {
-      const wallets = listSolanaWallets();
-      const wallet = wallets[0];
-      if (wallet === undefined) throw new Error("No Solana wallet found.");
-      const account = await connectWallet(wallet);
-      if (account.address !== owner) {
-        throw new Error(`Connected wallet ${shortAddr(account.address)} does not match this position's owner ${shortAddr(owner)}.`);
-      }
-
-      setStatus("building");
       const repayRaw = uiToRaw(borrow.amount * 1.001, borrow.decimals);
       const withdrawRaw = uiToRaw(deposit.amount, deposit.decimals);
       const maxUsdcInRaw = uiToRaw(borrow.marketValueUsd * 1.05, 6);
@@ -47,19 +42,25 @@ export function CloseButton({ owner, borrow, deposit }: { owner: string; borrow:
     }
   }
 
-  const busy = status === "connecting" || status === "building" || status === "sending";
+  const busy = status === "building" || status === "sending";
 
   return (
     <div className="space-y-2">
       <button
         type="button"
         onClick={handleClose}
-        disabled={busy || status === "done"}
+        disabled={busy || status === "done" || !account || ownerMismatch}
         className="press-scale flex items-center justify-center gap-2 rounded-[var(--radius-ticket)] bg-[var(--accent)] px-4 py-2.5 font-medium text-[var(--accent-ink)] disabled:opacity-40"
       >
         {busy && <CircleNotch size={16} className="animate-spin motion-reduce:animate-none" weight="bold" />}
         {status === "done" ? "Closed" : busy ? "Closing…" : "Close position"}
       </button>
+      {!account && <p className="text-sm text-[var(--ink-dim)]">Connect the owner wallet from the top bar to close.</p>}
+      {ownerMismatch && (
+        <p className="text-sm text-[var(--negative)]">
+          Connected wallet {shortAddr(account.address)} does not match this position&apos;s owner {shortAddr(owner)}.
+        </p>
+      )}
       {status === "error" && error && (
         <p className="flex items-start gap-1.5 text-sm text-[var(--negative)]">
           <WarningCircle size={16} weight="fill" className="mt-0.5 shrink-0" />

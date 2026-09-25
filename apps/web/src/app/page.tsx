@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
 import { readReserveRows, readMarketOpenState, toPublicRow } from "@/lib/reserves";
 import { readPythFair, type PythFair } from "@/lib/pyth-fair";
@@ -104,17 +103,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             </div>
           </div>
 
-          <nav className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm lg:flex-col lg:items-end lg:gap-1">
-            <Link href="/hedge" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
-              Hedge a holding
-            </Link>
-            <Link href="/positions" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
-              View a position
-            </Link>
-            <Link href="/pitch" className="press-scale whitespace-nowrap text-[var(--accent)] underline underline-offset-2">
-              Pitch
-            </Link>
-          </nav>
         </div>
         {marketError && (
           <div className="border-t border-[var(--rule)] bg-[var(--negative)]/5 px-6 py-2 text-center text-xs text-[var(--negative)]">
