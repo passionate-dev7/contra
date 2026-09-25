@@ -5,6 +5,8 @@ export interface PublicReserveRow {
   reason: string;
   maxLtv: number;
   liqLtv: number;
+  /** Per-reserve borrow factor as a ratio (e.g. 1.66), from live Kamino config. */
+  borrowFactor: number | null;
   borrowApy: number;
   availableRaw: string;
   decimals: number;

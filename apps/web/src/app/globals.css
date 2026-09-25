@@ -43,6 +43,13 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
+h1,
+h2,
+h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 * {
   border-color: var(--rule);
 }
@@ -65,6 +72,13 @@ body {
   }
   .enter-scale {
     animation: enter-scale 180ms ease-out both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-pulse {
+    animation: none;
   }
 }
 

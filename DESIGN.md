@@ -12,16 +12,19 @@ on the right, the way a floor broker's blotter and pad sit together.
 
 Two fixed columns above 1024px, stacked below it:
 
-- **Left — the blotter.** A ledger-ruled table of the market: the 9 xStock
-  reserves, each row showing symbol, max LTV, liquidation LTV, borrow APY,
+- **Left — the blotter.** A ledger-ruled table of the market: the xStock
+  reserves, each row showing symbol, borrow factor, borrow APY,
   available liquidity, and a status stamp (`BORROWABLE` or `LIMIT 0`). Above
-  it, a ticker strip states the two live facts: `4 of 9 xStocks can be
-  shorted right now` and the US market open/closed state. Below it, the
+  it, a ticker strip states the two live facts: the number of xStocks that
+  can be shorted right now and the US market open/closed state. Below it, the
   `/positions` obligation summary when an owner is loaded.
 - **Right — the ticket.** A single fixed order-pad card: ticker select,
   size in USD, collateral in USDC, live LTV / liquidation price / borrow
   APY readout, and the Open Short action. This card never scrolls out of
   view on desktop; on mobile it follows the blotter in document order.
+  USDC's collateral limits are stated once in the ticket
+  ("USDC collateral: max LTV …, liquidation …", live from the USDC
+  reserve), never repeated per xStock row.
 
 No hero, no marketing scroll. The ticket is visible on load, which is the
 uicontract's "CTA on first screen" requirement read literally for a tool
@@ -54,9 +57,9 @@ radius exists only to soften hairlines, not to round cards into pills.
 
 ## Type
 
-- Display / numerals of record (headline, ticker prices, the "4 of 9" line):
-  **Spectral** (serif, `next/font/google`), weight 500/600. Roman only, no
-  italic headings.
+- Display / numerals of record (headline, ticker prices, the live reserve count):
+  **Spectral** (serif, self-hosted with `next/font/local`), weight 500/600.
+  Roman only, no italic headings.
 - Body and labels: **Work Sans**, weight 400/500.
 - Tabular data (the blotter table, the ticket's size/collateral/APY figures):
   **IBM Plex Mono**, `font-variant-numeric: tabular-nums`, weight 400/500.
@@ -77,7 +80,7 @@ since it is the primary action, then the blotter beneath it.
 - **Ticker strip**: single row, monospace, live dot (accent, pulses only
   without `prefers-reduced-motion`), the two computed facts separated by a
   hairline.
-- **Blotter row**: ticker, four numeric columns, a stamp badge
+- **Blotter row**: ticker, borrow factor plus the numeric columns, a stamp badge
   (`BORROWABLE` in `--positive` outline, or `LIMIT 0` in `--negative`
   outline with the reason as a tooltip/subtext — never just greyed out).
 - **Order ticket card**: `--paper-raised` fill, 1px `--rule-strong` border,

@@ -11,7 +11,8 @@ export interface ReserveRow {
   reason: string;
   maxLtv: number;
   liqLtv: number;
-  borrowFactor: number;
+  /** Per-reserve borrow factor as a ratio (e.g. 1.66 = 1.66x), from live config. */
+  borrowFactor: number | null;
   borrowApy: number;
   availableRaw: string;
   borrowLimitRaw: string;
@@ -23,11 +24,21 @@ export interface ReserveRow {
   pairBorrowFactor: number | null;
 }
 
+/** Kamino stores borrowFactorPct as on-chain percent points (166 = 1.66x)
+ * in a BN; the SDK surfaces it as BN while loanToValuePct is a plain
+ * number. Normalize either shape to a plain number. */
+function cfgPctToNumber(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (v !== null && v !== undefined && typeof (v as { toNumber?: unknown }).toNumber === "function") {
+    return (v as { toNumber: () => number }).toNumber();
+  }
+  return Number(String(v));
+}
 /** Live read of every reserve in the xStocks market, hydrated with the pair
  * (USDC collateral, xStock debt) LTV/liquidation-LTV/borrow-factor the ticket
  * needs, and each reserve's borrow APY and oracle price. Nothing here is
  * hardcoded: borrowable is derived from the reserve's own borrowLimit/available
- * liquidity, exactly the "5 of 9 have borrowLimit 0" fact the brief names. */
+  * liquidity, rather than a static reserve list. */
 export async function readReserveRows(): Promise<ReserveRow[]> {
   const market = await loadMarket();
   const instant = await ledgerInstant();
@@ -86,6 +97,9 @@ export async function readReserveRows(): Promise<ReserveRow[]> {
       pairBorrowFactor = pair.borrowFactor;
     }
 
+    const cfgBorrowFactorPct = cfgPctToNumber(cfg.borrowFactorPct);
+    const borrowFactor = Number.isFinite(cfgBorrowFactorPct) ? cfgBorrowFactorPct / 100 : null;
+
     rows.push({
       symbol,
       mint: reserve.getLiquidityMint().toString(),
@@ -95,7 +109,7 @@ export async function readReserveRows(): Promise<ReserveRow[]> {
       reason,
       maxLtv: cfg.loanToValuePct,
       liqLtv: cfg.liquidationThresholdPct,
-      borrowFactor: cfg.borrowFactorPct,
+      borrowFactor,
       borrowApy: reserve.totalBorrowAPY(instant),
       availableRaw,
       borrowLimitRaw,
@@ -119,6 +133,7 @@ export function toPublicRow(r: ReserveRow): PublicReserveRow {
     reason: r.reason,
     maxLtv: r.pairMaxLtv ?? r.maxLtv,
     liqLtv: r.pairLiqLtv ?? r.liqLtv,
+    borrowFactor: r.borrowFactor,
     borrowApy: r.borrowApy,
     availableRaw: r.availableRaw,
     decimals: r.decimals,
@@ -134,11 +149,21 @@ export interface MarketOpenState {
   isOpen: boolean;
   nextOpenUnix: number | null;
   nextCloseUnix: number | null;
+  error: string | null;
 }
 
 /** US equities open/close on one clock; SPY's Pyth feed hours stand for the
  * whole market. Free `/v2/price_feeds` endpoint, no PYTH_API_KEY needed. */
 export async function readMarketOpenState(): Promise<MarketOpenState> {
-  const feed = await resolveEquityFeed("SPY");
-  return { isOpen: feed.isOpen, nextOpenUnix: feed.nextOpenUnix, nextCloseUnix: feed.nextCloseUnix };
+  try {
+    const feed = await resolveEquityFeed("SPY");
+    return { isOpen: feed.isOpen, nextOpenUnix: feed.nextOpenUnix, nextCloseUnix: feed.nextCloseUnix, error: null };
+  } catch (err) {
+    return {
+      isOpen: false,
+      nextOpenUnix: null,
+      nextCloseUnix: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

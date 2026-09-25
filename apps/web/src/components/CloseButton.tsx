@@ -57,7 +57,7 @@ export function CloseButton({ owner, borrow, deposit }: { owner: string; borrow:
         disabled={busy || status === "done"}
         className="press-scale flex items-center justify-center gap-2 rounded-[var(--radius-ticket)] bg-[var(--accent)] px-4 py-2.5 font-medium text-[var(--accent-ink)] disabled:opacity-40"
       >
-        {busy && <CircleNotch size={16} className="animate-spin" weight="bold" />}
+        {busy && <CircleNotch size={16} className="animate-spin motion-reduce:animate-none" weight="bold" />}
         {status === "done" ? "Closed" : busy ? "Closing…" : "Close position"}
       </button>
       {status === "error" && error && (

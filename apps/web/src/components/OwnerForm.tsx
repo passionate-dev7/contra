@@ -15,7 +15,11 @@ export function OwnerForm({ initial }: { initial?: string }) {
       }}
       className="flex flex-col gap-2 sm:flex-row"
     >
+      <label htmlFor="position-wallet" className="sr-only">Solana wallet address</label>
       <input
+        id="position-wallet"
+        type="text"
+        autoComplete="off"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Wallet address"

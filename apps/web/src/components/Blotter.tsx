@@ -33,61 +33,68 @@ export function Blotter({ initialRows }: { initialRows: PublicReserveRow[] }) {
   const xstocks = rows.filter((r) => r.isXstock);
 
   return (
-    <section className="border border-[var(--rule-strong)] bg-[var(--paper-raised)] rounded-[var(--radius-ticket)]">
+    <section aria-busy={state === "loading"} className="order-2 rounded-[var(--radius-ticket)] border border-[var(--rule-strong)] bg-[var(--paper-raised)] lg:order-1">
       <div className="flex items-center justify-between border-b border-[var(--rule)] px-4 py-3">
         <h2 className="font-[family-name:var(--font-display)] text-lg">The blotter</h2>
         <button
           type="button"
           onClick={refresh}
           disabled={state === "loading"}
-          className="press-scale flex items-center gap-1.5 text-sm text-[var(--ink-dim)] hover:text-[var(--ink)] disabled:opacity-50"
+          className="press-scale flex items-center gap-1.5 text-sm text-[var(--ink-dim)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <ArrowClockwise size={14} className={state === "loading" ? "animate-spin" : undefined} weight="bold" />
+          <ArrowClockwise size={14} aria-hidden="true" className={state === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} weight="bold" />
           Refresh
         </button>
       </div>
 
       {state === "error" && (
-        <div className="flex items-start gap-2 border-b border-[var(--rule)] bg-[var(--negative)]/5 px-4 py-3 text-sm text-[var(--negative)]">
-          <WarningCircle size={16} weight="fill" className="mt-0.5 shrink-0" />
+        <div role="alert" className="flex items-start gap-2 border-b border-[var(--rule)] bg-[var(--negative)]/5 px-4 py-3 text-sm text-[var(--negative)]">
+          <WarningCircle size={16} weight="fill" aria-hidden="true" className="mt-0.5 shrink-0" />
           <span>Could not refresh the reserve table: {error}</span>
         </div>
       )}
 
-      {xstocks.length === 0 ? (
+      {state === "loading" ? (
+        <div role="status" aria-live="polite" className="border-b border-[var(--rule)] px-4 py-3">
+          <span className="sr-only">Refreshing reserve table</span>
+          <div className="space-y-3" aria-hidden="true">
+            {[0, 1, 2, 3].map((row) => (
+              <div key={row} className="h-5 w-full bg-[var(--rule)]" />
+            ))}
+          </div>
+        </div>
+      ) : xstocks.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-[var(--ink-dim)]">
           No xStock reserves were returned by the market. The RPC endpoint may be unreachable.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div>
+          <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-[var(--rule)] text-left text-xs uppercase tracking-wide text-[var(--ink-dim)]">
-                <th className="px-4 py-2 font-medium">Symbol</th>
-                <th className="px-4 py-2 font-medium text-right">Max LTV</th>
-                <th className="hidden px-4 py-2 font-medium text-right sm:table-cell">Liq. LTV</th>
-                <th className="hidden px-4 py-2 font-medium text-right sm:table-cell">Borrow APY</th>
-                <th className="hidden px-4 py-2 font-medium text-right md:table-cell">Available</th>
-                <th className="px-4 py-2 font-medium text-right">Status</th>
+                <th scope="col" className="w-[22%] px-2 py-2 font-medium sm:px-4">Symbol</th>
+                <th scope="col" className="w-[22%] px-2 py-2 text-right font-medium sm:px-4">Borrow factor</th>
+                <th scope="col" className="hidden w-[18%] px-4 py-2 text-right font-medium sm:table-cell">Borrow APY</th>
+                <th scope="col" className="hidden w-[18%] px-4 py-2 text-right font-medium md:table-cell">Available</th>
+                <th scope="col" className="w-[20%] px-2 py-2 text-right font-medium sm:px-4">Status</th>
               </tr>
             </thead>
             <tbody className="font-[family-name:var(--font-mono)] tabular">
               {xstocks.map((r) => (
                 <tr key={r.symbol} className="border-b border-[var(--rule)] last:border-0">
-                  <td className="px-4 py-2.5 font-[family-name:var(--font-body)] font-medium">{r.symbol}</td>
-                  <td className="px-4 py-2.5 text-right">{fmtPct(r.maxLtv, 0)}</td>
-                  <td className="hidden px-4 py-2.5 text-right sm:table-cell">{fmtPct(r.liqLtv, 0)}</td>
+                  <th scope="row" className="min-w-0 px-2 py-2.5 text-left font-[family-name:var(--font-body)] font-medium sm:px-4">{r.symbol}</th>
+                  <td className="px-2 py-2.5 text-right sm:px-4">{r.borrowFactor !== null ? `${Math.round(r.borrowFactor * 100)}%` : "-"}</td>
                   <td className="hidden px-4 py-2.5 text-right sm:table-cell">{fmtPct(r.borrowApy * 100)}</td>
                   <td className="hidden px-4 py-2.5 text-right md:table-cell">{fmtNum(Number(r.availableRaw) / 10 ** r.decimals, 2)}</td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-2 py-2.5 text-right sm:px-4">
                     {r.borrowable ? (
                       <span className="inline-flex items-center gap-1 text-[var(--positive)]">
-                        <CheckCircle size={14} weight="fill" />
+                        <CheckCircle size={14} weight="fill" aria-hidden="true" />
                         <span className="hidden sm:inline">borrowable</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[var(--negative)]" title={r.reason}>
-                        <WarningCircle size={14} weight="fill" />
+                      <span className="inline-flex items-center gap-1 text-[var(--negative)]" title={r.reason} aria-label={r.reason}>
+                        <WarningCircle size={14} weight="fill" aria-hidden="true" />
                         <span className="hidden sm:inline">{r.reason}</span>
                         <span className="sm:hidden">blocked</span>
                       </span>

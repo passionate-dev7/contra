@@ -1,24 +1,31 @@
 import type { Metadata } from "next";
-import { Spectral, Work_Sans, IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const spectral = Spectral({
-  subsets: ["latin"],
-  weight: ["500", "600"],
+const spectral = localFont({
+  src: [
+    { path: "../../public/fonts/spectral-500.ttf", weight: "500", style: "normal" },
+    { path: "../../public/fonts/spectral-600.ttf", weight: "600", style: "normal" },
+  ],
   variable: "--font-spectral",
   display: "swap",
 });
 
-const workSans = Work_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const workSans = localFont({
+  src: [
+    { path: "../../public/fonts/work-sans-400.ttf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/work-sans-500.ttf", weight: "500", style: "normal" },
+    { path: "../../public/fonts/work-sans-600.ttf", weight: "600", style: "normal" },
+  ],
   variable: "--font-work-sans",
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const plexMono = localFont({
+  src: [
+    { path: "../../public/fonts/ibm-plex-mono-400.ttf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/ibm-plex-mono-500.ttf", weight: "500", style: "normal" },
+  ],
   variable: "--font-plex-mono",
   display: "swap",
 });
