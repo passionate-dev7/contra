@@ -15,6 +15,8 @@ import { loadMarket, findUsdcReserve, findXstockReserve, vanillaObligationType, 
 import { buildScopeRefresh } from "./scope.js";
 import { kitIxToWeb3, readOnlySigner } from "./kit.js";
 import { getQuote, getSwapInstructions, routeLabel, type JupQuote } from "./jupiter.js";
+import { withPostconditions } from "./guard.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { USDC_MINT, XSTOCKS_MARKET_LUT } from "./constants.js";
 
 const V2_IXS = true;
@@ -156,32 +158,44 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
   const lookupTables = await resolveLookupTables(conn, [XSTOCKS_MARKET_LUT, ...swapIxs.lookupTableAddresses]);
   const payer = new PublicKey(req.owner);
 
-  const combined = await compileMessage(conn, payer, allIxs, lookupTables);
+  // Lighthouse postcondition: owner's USDC ATA must hold >= pre - collateral + minSwapOut
+  // at the end of the transaction, so a bad swap outcome reverts on-chain.
+  const usdcAta = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), payer, true);
+  let preUsdc = 0n;
+  try {
+    const bal = await conn.getTokenAccountBalance(usdcAta, "confirmed");
+    preUsdc = BigInt(bal.value.amount);
+  } catch {
+    preUsdc = 0n;
+  }
+  const rawMinOut = BigInt(quote.otherAmountThreshold);
+  const rawCollateral = BigInt(depositAmountRaw);
+  const minUsdcAfter = preUsdc - rawCollateral + rawMinOut < 0n ? 0n : preUsdc - rawCollateral + rawMinOut;
+  const guardedIxs = withPostconditions(allIxs, { owner: req.owner, usdcAta: usdcAta.toString(), minUsdcAfter });
+
+  const combined = await compileMessage(conn, payer, guardedIxs, lookupTables);
   const combinedSize = trySerializedSize(combined);
   if (combinedSize !== null && combinedSize <= 1232) {
     return {
-      instructions: allIxs,
+      instructions: guardedIxs,
       lookupTables,
       quote,
       route: routeLabel(quote),
       transaction: combined,
-      reason: `single v0 transaction: deposit + borrow + Jupiter sell fit within the 1232-byte limit (${combinedSize} bytes)`,
+      reason: `single v0 transaction: deposit + borrow + Jupiter sell + Lighthouse USDC>=${minUsdcAfter} fit within the 1232-byte limit (${combinedSize} bytes)`,
       scopeTokens: scopeRefresh.tokens,
     };
   }
 
-  // Split: Kamino leg (deposit+borrow) first, Jupiter leg (sell) second. The
+  // Split: Kamino leg (deposit+borrow) first, Jupiter leg (sell + Lighthouse guard) second. The
   // Jupiter leg must run after the Kamino leg lands, since it spends the
   // xStock the borrow just minted into the owner's account.
   const kaminoTx = await compileMessage(conn, payer, [...lead, ...kaminoIxs], lookupTables);
-  const jupTx = await compileMessage(
-    conn,
-    payer,
-    [lead[0]!, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup],
-    lookupTables,
-  );
+  const jupBase = [lead[0]!, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup];
+  const jupGuarded = withPostconditions(jupBase, { owner: req.owner, usdcAta: usdcAta.toString(), minUsdcAfter });
+  const jupTx = await compileMessage(conn, payer, jupGuarded, lookupTables);
   return {
-    instructions: allIxs,
+    instructions: [...lead, ...kaminoIxs, ...jupGuarded.slice(1)],
     lookupTables,
     quote,
     route: routeLabel(quote),
@@ -189,7 +203,7 @@ export async function buildOpenShort(conn: Connection, req: ShortRequest): Promi
     secondTransaction: jupTx,
     reason:
       "split into 2 transactions: the combined message exceeded the 1232-byte v0 limit. " +
-      "tx1 = Kamino deposit+borrow, tx2 (secondTransaction) = Jupiter sell, sent after tx1 lands.",
+      "tx1 = Kamino deposit+borrow, tx2 (secondTransaction) = Jupiter sell + Lighthouse guard, sent after tx1 lands.",
     scopeTokens: scopeRefresh.tokens,
   };
 }

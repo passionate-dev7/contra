@@ -5,3 +5,4 @@ export * from "./reserves.js";
 export * from "./jupiter.js";
 export * from "./build.js";
 export * from "./pyth.js";
+export * from "./guard.js";

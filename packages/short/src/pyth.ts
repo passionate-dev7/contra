@@ -1,5 +1,7 @@
 import { HERMES_URL } from "./constants.js";
 
+const PYTH_FEED_TIMEOUT_MS = 10_000;
+
 export class PythApiKeyMissingError extends Error {
   constructor() {
     super(
@@ -49,7 +51,10 @@ interface PriceFeedSearchResult {
  */
 export async function resolveEquityFeed(ticker: string): Promise<PriceFeedMeta> {
   const symbol = `Equity.US.${ticker.toUpperCase()}`;
-  const res = await fetch(`${HERMES_URL}/v2/price_feeds?query=${encodeURIComponent(symbol)}`);
+  const res = await fetch(`${HERMES_URL}/v2/price_feeds?query=${encodeURIComponent(symbol)}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(PYTH_FEED_TIMEOUT_MS),
+  });
   if (!res.ok) {
     throw new Error(`Hermes price_feeds lookup failed: ${res.status} ${await res.text()}`);
   }
