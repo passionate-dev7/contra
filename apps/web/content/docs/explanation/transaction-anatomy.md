@@ -44,13 +44,13 @@ Jupiter's response also contains `computeBudgetInstructions` and an optional `to
 
 ## The Lighthouse bound
 
-`build.ts:163` reads the owner's USDC ATA balance at build time (0 if the account does not exist) and sets:
+`build.ts:163` reads the owner's USDC ATA balance at build time (0 for a first-time owner whose ATA is created in the same transaction) and sets:
 
 ```
 minUsdcAfter = max(0, preUsdc - usdcCollateral + quote.otherAmountThreshold)
 ```
 
-`otherAmountThreshold` is Jupiter's post-slippage minimum out for the sell. If the balance at the end of the transaction is lower, Lighthouse fails with custom error 6001 and the whole transaction reverts. See [risk-and-trust](risk-and-trust.md#what-the-lighthouse-guard-catches) for what that does and does not cover.
+`otherAmountThreshold` is Jupiter's post-slippage minimum out for the sell. If the balance at the end of the transaction is lower, Lighthouse fails with custom error 6001 and the whole transaction reverts. See [security-model](security-model.md#what-the-lighthouse-guard-enforces) for what it enforces.
 
 The instruction data is 12 bytes: `u8 9` (AssertTokenAccount) | `u8 0` (log level silent) | `u8 2` (Amount) | `u64 LE` bound | `u8 4` (greater than or equal). The only account is the USDC ATA, read-only (`guard.ts:32`).
 
@@ -62,8 +62,6 @@ swap      = Jupiter setup..., swap (USDC to xStock, ExactIn, maxAccounts 20), cl
 kaminoIxs = KaminoAction.buildRepayAndWithdrawTxns(...) -> actionToIxs
 message   = lead + swap + kaminoIxs
 ```
-
-There is no Lighthouse instruction on the close.
 
 ## Address lookup tables
 
@@ -85,7 +83,7 @@ If it fits, `BuiltShort.transaction` is the only transaction and `reason` record
 | Open | compute budget, Scope refresh, Kamino deposit + borrow | compute budget, Jupiter sell, Lighthouse guard |
 | Close | compute budget, Jupiter buy-back | compute budget, Scope refresh, Kamino repay + withdraw |
 
-In the split case the two halves are not atomic. On an open, if tx1 lands and tx2 fails, the owner holds a Kamino borrow and the unsold xStock. On a close, if tx1 lands and tx2 fails, the owner holds the bought xStock and the borrow is still open. The web client sends tx2 only after tx1 is `confirmed` (`apps/web/src/lib/wallet.ts:55`).
+The halves are ordered by construction: the sale needs the borrowed xStock on an open, and the repay needs the bought-back xStock on a close. The web client sends tx2 only after tx1 is `confirmed` (`apps/web/src/lib/wallet.ts:55`).
 
 Measured sizes recorded in code: a Byreal route pushed the close over 1232 bytes and a Riptide route fit at 1165 (`build.ts:25`). That is why the close quote passes `maxAccounts: 20`. The open quote passes no `maxAccounts`. The 2026-09-25 06:25 UTC open build above was 1024 bytes on a Byreal route.
 

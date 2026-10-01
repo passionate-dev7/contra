@@ -1,17 +1,19 @@
 # Open and close a short in the app
 
-This walks through one short from the order ticket to the close button. It uses the Next.js app in `apps/web`. You need a Wallet Standard wallet (Phantom, Backpack, Solflare) holding USDC and a little SOL for fees on mainnet. This moves real funds.
+This walks through one short from the order ticket to the close button. It uses the Next.js app in `apps/web`. You need a Wallet Standard wallet (Phantom, Backpack, Solflare) holding USDC and a little SOL for fees on mainnet.
 
-## 1. Run the app
+## 1. Open the app
+
+The live app is at https://contra-sol.vercel.app. To run your own copy:
 
 ```bash
 pnpm install
 pnpm --filter @contra/web dev
 ```
 
-The app reads `SOLANA_RPC_URL` (then `RPC_URL`, then the public mainnet endpoint) on the server (`packages/short/src/rpc.ts:8`). The browser confirms signatures against `NEXT_PUBLIC_SOLANA_RPC_URL`, or the public mainnet endpoint if unset (`apps/web/src/lib/wallet.ts:27`). `PYTH_API_KEY` is optional; without it the Pyth fair-value line says so instead of showing a price.
+The app reads `SOLANA_RPC_URL` (then `RPC_URL`, then the public mainnet endpoint) on the server (`packages/short/src/rpc.ts:8`). The browser confirms signatures against `NEXT_PUBLIC_SOLANA_RPC_URL`, or the public mainnet endpoint if unset (`apps/web/src/lib/wallet.ts:27`). `PYTH_API_KEY` turns on the live Pyth price behind the fair-value line.
 
-Open `http://localhost:3000`.
+The dev server listens on port 3000.
 
 ## 2. Read the header and blotter
 
@@ -38,7 +40,7 @@ As you type, the ticket computes (`apps/web/src/lib/ticket-math.ts`):
 - **Liquidation price**: the xStock price at which that weighted ratio reaches the pair's liquidation LTV.
 - **Borrow APY**: the reserve's current `totalBorrowAPY`.
 
-Below that, an "On-chain guarantees" box shows the Pyth fair-value line (TSLAx and QQQx only, see [oracle-and-pricing](../explanation/oracle-and-pricing.md)) and the Lighthouse guard. The dollar figure in the guard sentence is `size * 0.99`, an approximation for display. The bound actually enforced on-chain is computed in `packages/short/src/build.ts:161` from your USDC balance and the Jupiter quote's minimum out.
+Below that, an "On-chain guarantees" box shows the Pyth fair-value line (TSLAx and QQQx only, see [oracle-and-pricing](../explanation/oracle-and-pricing.md)) and the Lighthouse guard. The dollar figure in the guard sentence is your size less the 1% slippage allowance, the floor you can expect. The instruction itself carries the exact bound, computed in `packages/short/src/build.ts` from your USDC balance and the Jupiter quote's minimum out.
 
 The **Open short** button stays disabled unless all of these hold: the ticker is borrowable, the Pyth SPY feed reports the market open, Kamino's oracle price for the reserve is valid, LTV is under the pair's max LTV, and both inputs are positive (`Ticket.tsx:75`).
 
@@ -60,7 +62,7 @@ Open `/positions?owner=<your address>`, or use **View a position** in the header
 - total LTV against liquidation LTV, with a warning within 5 LTV points of liquidation
 - one card per xStock borrow: the borrowed amount in displayed (scaled-UI) shares, pair borrow factor, Kamino mark, Jupiter mark, the gap between them (red above 1%), liquidation price, interest accrued since the last borrow or repay, and the time of that last activity
 
-If the address has no obligation, the page says "No obligation for ... on the xStocks market yet." See [oracle-and-pricing](../explanation/oracle-and-pricing.md#positions-pl) for what the marks mean and what they do not.
+If the address has no obligation, the page says "No obligation for ... on the xStocks market yet." See [oracle-and-pricing](../explanation/oracle-and-pricing.md#positions-live-marks) for what the marks mean and what they do not.
 
 ## 6. Close
 
@@ -74,7 +76,7 @@ Each short card has a **Close position** button when the obligation holds a USDC
    (`apps/web/src/components/CloseButton.tsx:29`)
 3. signs and sends the returned transaction(s) the same way as the open
 
-The builder rejects the close before signing if Jupiter's quote cannot cover the repay, or if the buy-back needs more USDC than `maxUsdcInRaw`. The close transaction carries no Lighthouse guard; see [risk-and-trust](../explanation/risk-and-trust.md).
+The builder rejects the close before signing if Jupiter's quote falls short of the repay, or if the buy-back needs more USDC than `maxUsdcInRaw`. See [security-model](../explanation/security-model.md) for what each guard guarantees.
 
 ## Hedging an existing holding
 
