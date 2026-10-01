@@ -60,8 +60,11 @@ The instruction data is 12 bytes: `u8 9` (AssertTokenAccount) | `u8 0` (log leve
 lead      = [ComputeBudget setComputeUnitLimit(1_400_000), Scope refresh_price_list?]
 swap      = Jupiter setup..., swap (USDC to xStock, ExactIn, maxAccounts 20), cleanup?
 kaminoIxs = KaminoAction.buildRepayAndWithdrawTxns(...) -> actionToIxs
-message   = lead + swap + kaminoIxs
+guard     = Lighthouse AssertTokenAccount(xstockAta, amount >= preCloseXstock)
+message   = lead + swap + kaminoIxs + guard
 ```
+
+The guard reads the owner's xStock account, the Token-2022 ATA. It runs after the buy-back and the repay, so the balance it checks is the net result of the whole close. If the buy-back falls short the balance is below the pre-close value and Lighthouse reverts the message with custom error 6001. In a split close the guard is the last instruction of tx2, the repay leg: `compute budget, Scope refresh, Kamino repay + withdraw, Lighthouse guard`.
 
 ## Address lookup tables
 
@@ -81,7 +84,7 @@ If it fits, `BuiltShort.transaction` is the only transaction and `reason` record
 | | `transaction` (send first) | `secondTransaction` (send after the first confirms) |
 |---|---|---|
 | Open | compute budget, Scope refresh, Kamino deposit + borrow | compute budget, Jupiter sell, Lighthouse guard |
-| Close | compute budget, Jupiter buy-back | compute budget, Scope refresh, Kamino repay + withdraw |
+| Close | compute budget, Jupiter buy-back | compute budget, Scope refresh, Kamino repay + withdraw, Lighthouse guard |
 
 The halves are ordered by construction: the sale needs the borrowed xStock on an open, and the repay needs the bought-back xStock on a close. The web client sends tx2 only after tx1 is `confirmed` (`apps/web/src/lib/wallet.ts:55`).
 
@@ -98,4 +101,4 @@ Measured sizes recorded in code: a Byreal route pushed the close over 1232 bytes
 | Swap pool accounts | whichever AMM Jupiter routes through |
 | Lookup tables | Address Lookup Table program |
 
-Lighthouse owns no account in the transaction. It only reads the USDC ATA.
+Lighthouse owns no account in the transaction. It only reads the USDC ATA on open and the xStock ATA on close.

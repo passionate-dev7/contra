@@ -9,6 +9,7 @@ Each proof has two halves:
 | `packages/short/src/simulate.ts` | `packages/short/check.mjs` |
 | `packages/short/src/simulate-close.ts` | `packages/short/check-close.mjs` |
 | `packages/short/src/simulate-guard.ts pass` and `fail` | `packages/short/check-guard.mjs` (runs both builders itself) |
+| `packages/short/src/simulate-close-guard.ts pass` and `fail` | `packages/short/check-close-guard.mjs` (runs both builders itself) |
 
 The web-app checks (`check-web.mjs`, `check-bf.mjs`, `apps/web/check-hedge.mjs`, `apps/web/check-positions.mjs`, `apps/web/check-pyth.mjs`, `apps/web/check-open-gate.mjs`) build and boot the Next.js app, then compare its routes against independent reads.
 
@@ -95,6 +96,20 @@ node check-guard.mjs
 The fail run rebuilds the same instructions with the Lighthouse bound raised by 10^12 raw USDC (`simulate-guard.ts:100`). The fail artifact reverts with Lighthouse `Custom: 6001`, and its last log line is `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 failed: custom program error: 0x1771` (0x1771 = 6001).
 
 `simulate-guard.ts` retries up to 5 times when the build splits or the Jupiter leg fails on a stale quote.
+
+## Close guard
+
+```bash
+cd packages/short
+node check-close-guard.mjs
+```
+
+`check-close-guard.mjs` runs `npx tsx src/simulate-close-guard.ts pass` and `... fail` itself (300 s timeout each), then reads `packages/short/artifacts/sim-close-guard-pass.json` and `packages/short/artifacts/sim-close-guard-fail.json`. It asserts:
+
+- the pass run has `err: null` and a `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 invoke` log line, so the guarded close succeeds with Lighthouse in the transaction
+- the fail run, built with a bound the owner's xStock balance cannot reach, has a non-null `err` and a `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 failed` log line
+
+The fail artifact reverts with `InstructionError` `Custom: 6001`, the failure attributed to Lighthouse (`custom program error: 0x1771`).
 
 ## Web app checks
 

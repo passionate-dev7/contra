@@ -17,7 +17,7 @@ After a short is open, the position is an ordinary Kamino obligation owned by th
 | Kamino klend `KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD` | holds collateral, lends the xStock, enforces LTV and liquidation | `packages/short/src/constants.ts:3` |
 | Scope `HFn8GnPADiny6XqUoWE8uRPPxb29ikn4yTuPa9MF2fWJ` | the price klend checks on-chain | resolved by `@kamino-finance/scope-sdk` (version pinned at `10.2.6` in `packages/short/package.json`) |
 | Jupiter router `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4` and the AMMs it routes through | executes the sell and the buy-back at the quoted route | returned by `lite-api.jup.ag/swap/v1/swap-instructions` |
-| Lighthouse `L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95` | enforces the USDC balance postcondition on open, inside the transaction | `packages/short/src/guard.ts:4` |
+| Lighthouse `L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95` | enforces the USDC balance postcondition on open and the xStock balance postcondition on close, inside the transaction | `packages/short/src/guard.ts:4` |
 | `@kamino-finance/klend-sdk` | builds the Kamino instructions, which the checkers re-decode with the same layouts | `^12.0.0` in `packages/short/package.json` |
 | Your RPC | account reads and the blockhash | `SOLANA_RPC_URL` / `RPC_URL` |
 
@@ -59,6 +59,12 @@ On open, the last instruction asserts `usdcAta.amount >= preUsdc - collateral + 
 The bound comes from the owner's USDC balance at build time and Jupiter's post-slippage minimum out. The ticket shows the floor as your size less the 1% slippage allowance, and the instruction carries the exact figure computed at build time. When a wide route forces the open to split, the guard rides in the transaction that performs the sale.
 
 `packages/short/check-guard.mjs` proves the guard can fire: the impossible-bound run reverts with Lighthouse `Custom: 6001`. See [run-the-mainnet-proofs](../how-to/run-the-mainnet-proofs.md#lighthouse-guard).
+
+### On close
+
+The close ends with the same instruction on the owner's xStock token account, the Token-2022 ATA. The bound is the account's balance at build time (`buildCloseShort` in `packages/short/src/build.ts`): after the buy-back and the repay, the owner must hold at least as much xStock as before the close. The buy-back is exact-in with a buffer over the oracle price, so the repay is covered and the surplus stays in the account. A buy-back that comes up short leaves the balance below the bound and Lighthouse reverts the whole message before any state changes. When the close splits into two transactions, the guard is the last instruction of the repay leg.
+
+`packages/short/check-close-guard.mjs` proves it on mainnet simulation: the guarded close returns `err: null` with Lighthouse invoked, and an impossible bound reverts with `InstructionError` `Custom: 6001` from Lighthouse. See [run-the-mainnet-proofs](../how-to/run-the-mainnet-proofs.md#close-guard).
 
 ## Oracle staleness
 

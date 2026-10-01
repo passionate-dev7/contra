@@ -27,6 +27,8 @@ The reason is the workflow. Kamino's own guide opens a short in three wallet con
 
 **One signature to close.** The same message in reverse: buy the xStock back through Jupiter, `repay_obligation_liquidity`, `withdraw_obligation_collateral_and_redeem_reserve_collateral`. Jupiter has no exact-out route for these mints, so the close buys exact-in with a buffer over the oracle price and checks that the quote's minimum-out covers the repay before it builds anything.
 
+**A short buy-back reverts on-chain.** The close ends with a Lighthouse `AssertTokenAccount` instruction on the owner's xStock token account (the Token-2022 ATA): after the buy-back and the repay, the balance must be at or above its pre-close value, so a buy-back that comes up short reverts the whole message. In a split close the guard is the last instruction of the repay leg. `packages/short/check-close-guard.mjs` reruns both sides: the guarded close simulates with `err: null` and Lighthouse invoked, and an impossible bound reverts with `InstructionError` `Custom: 6001` from Lighthouse.
+
 **Never a stale-oracle short.** Kamino prices every xStock reserve through a Scope chain (Chainlink Data Streams and Pyth Lazer leaves feeding derived entries). Before building, Contra recomputes how old the upstream leaves are and prepends a `refresh_price_list` instruction at index 1, directly after the compute-budget instruction (the only instruction Scope allows before it), covering every derived entry the reserves touch. If the leaves themselves are older than the reserve's `maxAgePriceSeconds`, the build stops with `MarketClosedError` instead of producing a transaction Kamino would reject.
 
 **A bad fill reverts on-chain.** The open ends with a Lighthouse `AssertTokenAccount` instruction (`packages/short/src/guard.ts`) asserting that the owner's USDC balance is at or above the quoted minimum after the deposit and the sale. A normal open passes it, with Lighthouse a real participant in the transaction. An impossible bound reverts the whole message with Lighthouse's own custom error `6001` before any state changes. `packages/short/check-guard.mjs` reruns both: the guarded open simulates with `err: null` and Lighthouse's program log present, and the impossible-bound run reverts with `Custom: 6001` attributed to the Lighthouse program.
@@ -71,6 +73,8 @@ Every check has a red counterpart in `packages/short/artifacts/`, which is what 
 | `sim-close-red.json` | withdraw $4,000 of USDC collateral against a 0.01 SPYx repay | reverts with custom error 6011 (`WithdrawTooLarge`); `check-close.mjs` reports `RED` |
 | `sim-guard-pass.json` | normal open with the Lighthouse bound | `err: null`, `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 invoke` in the logs |
 | `sim-guard-fail.json` | impossible USDC bound | `Custom: 6001`, the failure attributed to the Lighthouse program in the logs |
+| `sim-close-guard-pass.json` | normal close with the Lighthouse xStock bound | `err: null`, Lighthouse invoked in the logs |
+| `sim-close-guard-fail.json` | impossible xStock bound on the close | `InstructionError` `Custom: 6001`, the failure attributed to the Lighthouse program in the logs |
 
 `check-web.mjs` builds the Next.js app, boots it, and asserts against live routes: `/api/reserves` returns exactly the borrowable set, the home page states the live "N of M xStocks can be shorted" figure and the US market open or closed state, and `/api/open` returns a transaction that invokes both the Kamino program and Jupiter's router. `apps/web/check-open-gate.mjs`, `check-hedge.mjs`, `check-positions.mjs` and `check-pyth.mjs` each re-read the relevant state directly (Hermes, raw token accounts, a raw obligation decode) instead of trusting the app's own arithmetic. Walkthrough: [docs/how-to/run-the-mainnet-proofs.md](docs/how-to/run-the-mainnet-proofs.md).
 
@@ -82,7 +86,7 @@ wallet --POST /api/open--> apps/web --buildOpenShort--> packages/short
                                                           |  walk Scope chain, build refresh_price_list
                                                           |  quote + swap-instructions from Jupiter
                                                           |  compile v0 message with the market lookup table
-                                                          |  append Lighthouse AssertTokenAccount
+                                                          |  append Lighthouse AssertTokenAccount (open: USDC, close: xStock)
 wallet <--unsigned base64 v0 transaction-----------------+
 wallet signs (Wallet Standard), sends, confirms
 ```
@@ -103,6 +107,7 @@ npx tsx src/simulate.ts                  # build + simulate an open short, write
 node check.mjs                           # independently verify the artifact
 npx tsx src/simulate-close.ts && node check-close.mjs
 npx tsx src/simulate-guard.ts pass && npx tsx src/simulate-guard.ts fail && node check-guard.mjs
+node check-close-guard.mjs
 cd ../../apps/web
 node check-open-gate.mjs                 # /api/open agrees with Hermes market hours, ticker by ticker
 node check-hedge.mjs                     # independent hedge check, builds and boots the app
