@@ -23,9 +23,18 @@ try {
   if (!/market (open|closed)/i.test(home.replace(/<[^>]+>/g, " "))) throw new Error("home must show US market open/closed state");
   const o = await (await get("/api/open", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ owner: "sadmBTQm5HJsyzWHEjV4YwG9CiahZKVDVqAyS4Wx1zH", ticker: "SPYx", usdcCollateral: "500000", borrowRaw: "100000" }) })).json();
-  const txs = o.transactions ?? (o.txBase64 ? [o.txBase64] : []);
-  if (!txs.length) throw new Error(`/api/open returned no transaction: ${JSON.stringify(o).slice(0, 200)}`);
-  const progs = new Set(txs.flatMap((b) => { const t = VersionedTransaction.deserialize(Buffer.from(b, "base64")); return t.message.compiledInstructions.map((i) => t.message.staticAccountKeys[i.programIdIndex]?.toBase58()); }));
-  if (!progs.has(KLEND) || !progs.has(JUP)) throw new Error(`open-short tx must call Kamino and Jupiter; programs: ${[...progs].join(",")}`);
-  console.log(`ok: DESIGN.md + log entry, live borrowable set ${open}, live N of M stated, market state shown, open tx calls Kamino + Jupiter`);
+  const feeds = await (await fetch("https://hermes.pyth.network/v2/price_feeds?query=Equity.US.SPY")).json();
+  const spyOpen = feeds.find((f) => f.attributes.symbol === "Equity.US.SPY/USD")?.market_hours?.is_open === true;
+  let openResult;
+  if (spyOpen) {
+    const txs = o.transactions ?? (o.txBase64 ? [o.txBase64] : []);
+    if (!txs.length) throw new Error(`market open per Hermes, but /api/open returned no transaction: ${JSON.stringify(o).slice(0, 200)}`);
+    const progs = new Set(txs.flatMap((b) => { const t = VersionedTransaction.deserialize(Buffer.from(b, "base64")); return t.message.compiledInstructions.map((i) => t.message.staticAccountKeys[i.programIdIndex]?.toBase58()); }));
+    if (!progs.has(KLEND) || !progs.has(JUP)) throw new Error(`open-short tx must call Kamino and Jupiter; programs: ${[...progs].join(",")}`);
+    openResult = "market open, open tx calls Kamino + Jupiter";
+  } else {
+    if (o.transactions || !/market is closed/.test(o.error ?? "")) throw new Error(`market closed per Hermes, /api/open must refuse with MarketClosedError: ${JSON.stringify(o).slice(0, 200)}`);
+    openResult = "market closed, /api/open refused with MarketClosedError";
+  }
+  console.log(`ok: DESIGN.md + log entry, live borrowable set ${open}, live N of M stated, market state shown, ${openResult}`);
 } finally { try { process.kill(-srv.pid); } catch {} }
