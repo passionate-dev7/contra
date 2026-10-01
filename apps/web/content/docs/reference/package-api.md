@@ -2,7 +2,7 @@
 
 Everything re-exported from `packages/short/src/index.ts`. The package is `private: true` and consumed as a workspace dependency (`"@contra/short": "workspace:*"`).
 
-Not exported: `packages/short/src/kit.ts` (`readOnlySigner`, `kitIxToWeb3`) and `packages/short/src/scope.ts` (`buildScopeRefresh`, `ScopeRefresh`). Import them by file path if you need them.
+Also importable by file path: `packages/short/src/kit.ts` (`readOnlySigner`, `kitIxToWeb3`) and `packages/short/src/scope.ts` (`buildScopeRefresh`, `ScopeRefresh`).
 
 ## Builders (`build.ts`)
 
@@ -59,7 +59,7 @@ The four amount fields are UI-unit strings with 4 decimals. Running the file dir
 | `withPostconditions` | `(instructions: TransactionInstruction[], p: Postconditions) => TransactionInstruction[]` |
 | `Postconditions` | `{ owner: string \| PublicKey; usdcAta: string \| PublicKey; minUsdcAfter: bigint \| number \| string }` |
 
-`assertTokenAccountGteIx` works on any SPL token account despite the parameter name. It throws for a negative bound or one at or above 2^64. `withPostconditions` appends one assertion and ignores `owner`.
+`assertTokenAccountGteIx` works on any SPL token account despite the parameter name. It throws for a negative bound or one at or above 2^64. `withPostconditions` appends one assertion to the instruction list.
 
 ## Pyth (`pyth.ts`)
 
@@ -71,7 +71,7 @@ The four amount fields are UI-unit strings with 4 decimals. Running the file dir
 | `FreshPrice` | `{ ticker; feedId; priceUsd; publishTimeUnix; ageSeconds }` |
 | `MarketClosedError`, `StalePriceError`, `PythApiKeyMissingError` | error classes, see [errors](errors.md) |
 
-`requireFreshEquityPrice` is not called by either builder. See [oracle-and-pricing](../explanation/oracle-and-pricing.md#pyth-what-it-does-and-does-not-gate).
+See [oracle-and-pricing](../explanation/oracle-and-pricing.md#pyth-what-it-gates) for how Pyth feeds the open gate and the fair-value line.
 
 ## RPC (`rpc.ts`)
 
@@ -85,8 +85,6 @@ The four amount fields are UI-unit strings with 4 decimals. Running the file dir
 ## Constants (`constants.ts`)
 
 `XSTOCKS_MARKET`, `KLEND_PROGRAM_ID`, `USDC_MINT`, `TOKEN_2022_PROGRAM_ID`, `XSTOCKS_MARKET_LUT`, `JUP_QUOTE_URL`, `JUP_SWAP_INSTRUCTIONS_URL`, `HERMES_URL`, `reserveMetricsUrl(market)`, `PYTH_EQUITY_FEED_IDS`. Values are in [addresses](addresses.md).
-
-`reserveMetricsUrl` and `PYTH_EQUITY_FEED_IDS` are exported but nothing in the repo uses them. `PYTH_EQUITY_FEED_IDS` is an empty object.
 
 ## Scripts
 

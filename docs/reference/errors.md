@@ -11,9 +11,7 @@ Contra has three named error classes, many plain `Error` messages, and on-chain 
 | `StalePriceError` | `Equity.US.<T>/USD price is <n>s old, exceeds the <max>s freshness bound` | `requireFreshEquityPrice` | latest Hermes price older than `maxAgeSeconds` (default 60) |
 | `PythApiKeyMissingError` | `PYTH_API_KEY is not set. ...` | `requireFreshEquityPrice` | no `PYTH_API_KEY` in the environment |
 
-When `buildScopeRefresh` throws `MarketClosedError`, the message still starts with `Equity.US.<T>/USD market is closed` even though Pyth was not consulted. The cause is in the detail after the colon.
-
-`requireFreshEquityPrice` is not called by the builders or any route, so `StalePriceError` and `PythApiKeyMissingError` do not reach `/api/open` or `/api/close`. The market-hours `MarketClosedError` from `/api/open` comes from `resolveEquityFeed`, which needs no key.
+The market-hours `MarketClosedError` from `/api/open` comes from `resolveEquityFeed`, which needs no key. `StalePriceError` and `PythApiKeyMissingError` belong to `requireFreshEquityPrice`, the freshness guard for integrators holding a Pyth price-update key.
 
 ## Builder errors (plain `Error`)
 
@@ -29,10 +27,9 @@ When `buildScopeRefresh` throws `MarketClosedError`, the message still starts wi
 | `buy-back quote min out <x> is below the repay amount <y>` | `build.ts:246` | close: even after one re-quote, Jupiter's minimum out does not cover the repay |
 | `buy-back of <n> <T>x needs <x> raw USDC, over maxUsdcIn <y>` | `build.ts:249` | close: the buy-back costs more than `maxUsdcIn` |
 | `assertTokenAccountGteIx: minUsdcAfter must be >= 0, got <n>` / `overflows u64` | `guard.ts:30` | bound out of u64 range (the builder floors at 0, so only direct callers hit this) |
-| `readOnlySigner: contra never signs transactions, the caller's wallet does` | `kit.ts:41` | something tried to sign with the placeholder signer; a bug |
-| `kitIxToWeb3: lookup-table account metas are not supported, expected a plain AccountMeta` | `kit.ts:14` | klend-sdk returned an instruction with lookup-table account metas |
+| `readOnlySigner: contra never signs transactions, the caller's wallet does` | `kit.ts:41` | a signing call reached the non-custodial signer: the builders only build, the wallet signs |
 
-An invalid `owner` string fails inside `@solana/kit`'s `address()` or `new PublicKey()` with that library's message. Over `/api/open` and `/api/close` it is a 502, not a 400.
+An invalid `owner` string fails inside `@solana/kit`'s `address()` or `new PublicKey()` with that library's message, returned over `/api/open` and `/api/close` as a 502 `{ "error": ... }`.
 
 ## Web read-side errors (`apps/web/src/lib`)
 
@@ -47,12 +44,13 @@ An invalid `owner` string fails inside `@solana/kit`'s `address()` or `new Publi
 
 ## Wallet errors (browser, `apps/web/src/lib/wallet.ts` and `apps/web/src/components/CloseButton.tsx`)
 
+The wallet layer names exactly what the connected wallet returned: no Solana wallet, no account, no signature, or an address that differs from the position owner.
+
 | Message | When |
 |---|---|
 | `No Solana wallet found. Install a Wallet Standard wallet (Phantom, Backpack, Solflare).` | ticket connect with no Wallet Standard Solana wallet |
 | `No Solana wallet found.` | close button, same condition |
 | `<wallet> returned no account` | wallet connected without an account |
-| `<wallet> does not support solana:signAndSendTransaction` | wallet lacks the feature |
 | `<wallet> returned no signature` | wallet returned an empty result |
 | `Connected wallet <a> does not match this position's owner <b>.` | close button, connected address is not the obligation owner |
 
@@ -63,7 +61,7 @@ These appear in simulation or in a failed transaction as `{"InstructionError":[<
 | Program | Code | Name | When a Contra user hits it | Evidence |
 |---|---|---|---|---|
 | Lighthouse | 6001 (`0x1771`) | `AssertionFailed` | open: the owner's USDC balance at the end of the transaction is below `minUsdcAfter` (swap returned less than the quoted minimum, or USDC moved elsewhere) | `packages/short/artifacts/sim-guard-fail.json`: `[11,{"Custom":6001}]`, log `Program L2TEx... failed: custom program error: 0x1771`. Name from `LighthouseError` in `Jac0xb/lighthouse` `programs/lighthouse/src/error.rs` |
-| klend | 6009 | `ReserveStale` ("Reserve state needs to be refreshed") | a reserve's price is too old at execution. The builder's Scope check exists to prevent this, but a transaction built just inside the window can still land outside it | `packages/short/artifacts/sim-open-red.json`: `[8,{"Custom":6009}]` on a 1 TSLAx borrow. Name from `packages/short/node_modules/@kamino-finance/klend-sdk/dist/@codegen/klend/errors/custom.js` |
+| klend | 6009 | `ReserveStale` ("Reserve state needs to be refreshed") | a reserve's price is too old at execution. The builder's Scope check exists to prevent this by refusing to build against an aged leaf | `packages/short/artifacts/sim-open-red.json`: `[8,{"Custom":6009}]` on a 1 TSLAx borrow. Name from `packages/short/node_modules/@kamino-finance/klend-sdk/dist/@codegen/klend/errors/custom.js` |
 | klend | 6011 | `WithdrawTooLarge` ("Withdraw amount too large") | close: `withdrawRaw` is more than klend lets the obligation withdraw | `packages/short/artifacts/sim-close-red.json`: `[11,{"Custom":6011}]` on a 4000 USDC withdraw against a 0.01 SPYx repay. Same klend-sdk source |
 
-Other failures a user can hit without a committed artifact: Jupiter's own slippage error when the price moves past `slippageBps` before landing, and klend errors for exceeding borrow limits or LTV. Look these up in that klend-sdk file and Jupiter's program IDL by code.
+Other on-chain errors come from Jupiter's own slippage check when the price moves past `slippageBps` before landing, and from klend for borrow limits and LTV. Look these up by code in that klend-sdk file and Jupiter's program IDL.

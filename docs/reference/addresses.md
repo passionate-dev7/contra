@@ -60,7 +60,7 @@ Other tickers are resolved at runtime by symbol through Hermes `/v2/price_feeds`
 | Jupiter quote | `https://lite-api.jup.ag/swap/v1/quote` | `packages/short/src/constants.ts:14` |
 | Jupiter swap instructions | `https://lite-api.jup.ag/swap/v1/swap-instructions` | `packages/short/src/constants.ts:15` |
 | Pyth Hermes | `https://hermes.pyth.network` | `packages/short/src/constants.ts:17` |
-| Kamino reserve metrics | `https://api.kamino.finance/kamino-market/<market>/reserves/metrics` | `packages/short/src/constants.ts:10` (exported, unused) |
+| Kamino reserve metrics | `https://api.kamino.finance/kamino-market/<market>/reserves/metrics` | `packages/short/src/constants.ts:10` |
 | Default RPC | `https://api.mainnet-beta.solana.com` | `packages/short/src/rpc.ts:4` |
 
 ## Proof owners

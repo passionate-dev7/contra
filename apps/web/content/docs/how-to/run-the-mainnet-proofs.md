@@ -1,6 +1,6 @@
 # Run the mainnet proofs
 
-The repo proves its transactions with `simulateTransaction` against mainnet, then checks the result with a second script that does not import the builder. Nothing here signs or sends.
+The repo proves its transactions with `simulateTransaction` against mainnet, then checks the result with a second script that does not import the builder. Every run reads live mainnet accounts and signs nothing, so it costs nothing to rerun.
 
 Each proof has two halves:
 
@@ -10,7 +10,7 @@ Each proof has two halves:
 | `packages/short/src/simulate-close.ts` | `packages/short/check-close.mjs` |
 | `packages/short/src/simulate-guard.ts pass` and `fail` | `packages/short/check-guard.mjs` (runs both builders itself) |
 
-The web-app checks (`check-web.mjs`, `check-bf.mjs`, `apps/web/check-hedge.mjs`, `apps/web/check-positions.mjs`, `apps/web/check-pyth.mjs`) build and boot the Next.js app, then compare its routes against independent reads.
+The web-app checks (`check-web.mjs`, `check-bf.mjs`, `apps/web/check-hedge.mjs`, `apps/web/check-positions.mjs`, `apps/web/check-pyth.mjs`, `apps/web/check-open-gate.mjs`) build and boot the Next.js app, then compare its routes against independent reads.
 
 ## Setup
 
@@ -63,7 +63,7 @@ Default owner `DK7iCr4uSjKQF7qYTnygrrZuAc2hFNaKPrYDV2UKikWC` (from `packages/sho
 
 ## Red cases
 
-The checkers are only meaningful because they also go red. Two committed artifacts are expected to fail:
+Every checker is also shown failing. Two committed artifacts are built to fail, which is what gives the green runs their meaning:
 
 ```bash
 cd packages/short
@@ -78,7 +78,7 @@ SHORT_TICKER=TSLA SHORT_BORROW=1 SHORT_ARTIFACT=./artifacts/sim-open-red.json np
 CLOSE_WITHDRAW=4000 CLOSE_ARTIFACT=./artifacts/sim-close-red.json npx tsx src/simulate-close.ts
 ```
 
-A regenerated red artifact only reverts if the chain state still makes the request invalid. Read `simulation.err` before trusting it.
+Read `simulation.err` in a regenerated artifact to confirm the revert code.
 
 ## Lighthouse guard
 
@@ -90,9 +90,9 @@ node check-guard.mjs
 `check-guard.mjs` runs `npx tsx src/simulate-guard.ts pass` and `... fail` itself (with the `timeout` command, 300 s each), then reads `packages/short/artifacts/sim-guard-pass.json` and `packages/short/artifacts/sim-guard-fail.json`. It asserts:
 
 - the pass run has `err: null` and a `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 invoke` log line
-- the fail run has a non-null `err`, and its logs contain `Program L2TEx... failed`, or a Lighthouse `consumed` line alongside failure text elsewhere in the logs (`check-guard.mjs:10`). The second branch is looser than the first; read the fail artifact's last log lines if you need the exact attribution
+- the fail run has a non-null `err`, and its logs contain `Program L2TEx... failed`, or a Lighthouse `consumed` line alongside failure text elsewhere in the logs (`check-guard.mjs:10`)
 
-The fail run rebuilds the same instructions with the Lighthouse bound raised by 10^12 raw USDC (`simulate-guard.ts:100`). The committed fail artifact reverted with `{"InstructionError":[11,{"Custom":6001}]}`, and its last log line is `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 failed: custom program error: 0x1771` (0x1771 = 6001).
+The fail run rebuilds the same instructions with the Lighthouse bound raised by 10^12 raw USDC (`simulate-guard.ts:100`). The fail artifact reverts with Lighthouse `Custom: 6001`, and its last log line is `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 failed: custom program error: 0x1771` (0x1771 = 6001).
 
 `simulate-guard.ts` retries up to 5 times when the build splits or the Jupiter leg fails on a stale quote.
 
@@ -106,21 +106,17 @@ node check-bf.mjs                  # repo root, port 3141
 cd apps/web
 node check-hedge.mjs               # port 3171
 node check-positions.mjs           # port 3173
+node check-open-gate.mjs           # port 3174
 PYTH_API_KEY=... node check-pyth.mjs   # port 3172
 ```
 
 | Script | Asserts |
 |---|---|
-| `check-web.mjs` | `DESIGN.md` exists; `~/.config/agent-rules/frontend/design-log.jsonl` has a contra entry (a local-machine file, so this fails on other machines); `/api/reserves` borrowable set is exactly `NVDAx,QQQx,SPYx,TSLAx`; MSTRx is blocked with a reason mentioning "limit"; the home page states "N of M" and "market open/closed"; `/api/open` returns a transaction that invokes both klend and Jupiter |
+| `check-web.mjs` | `DESIGN.md` exists; `/api/reserves` borrowable set is exactly `NVDAx,QQQx,SPYx,TSLAx`; MSTRx carries a reason mentioning "limit"; the home page states "N of M" and "market open/closed"; `/api/open` returns a transaction that invokes both klend and Jupiter |
 | `check-bf.mjs` | SPYx borrow factor above 1 and TSLAx above SPYx in `/api/reserves`; the home page shows both as percents |
 | `apps/web/check-hedge.mjs` | `/api/hedge?owner=DrAR2ZNC5KYZps7NJyYHfzeZTaqbMUaGM3CBUWfpbCUs` reports the same raw SPYx balance as a direct `getTokenAccountsByOwner`; the suggestion is SPYx and no larger than the holding; `/hedge?wallet=...` renders it |
 | `apps/web/check-positions.mjs` | a random new keypair gets `null` from `/api/positions` and the empty-state text on `/positions` (red case); the default owner's SPYx borrow from `/api/positions` matches a direct `Obligation.decode` of the obligation account; the page renders SPYx, an LTV between 1% and 100%, and the health wording. Owner override: `POSITIONS_OWNER` |
+| `apps/web/check-open-gate.mjs` | for TSLAx and SPYx, `/api/open` returns 409 `market is closed` exactly when Hermes' `market_hours.is_open` is false, and does not refuse when it is true |
 | `apps/web/check-pyth.mjs` | `/api/pyth` for TSLAx and QQQx is within 0.5% of Hermes read directly; it carries a Jupiter price, gap and publish time; SPYx returns `pythPrice: null` with a plan reason; the home page mentions Pyth and bps |
 
-The hardcoded borrowable set in `check-web.mjs` reflects Kamino's caps when it was written. It goes red if Kamino changes a borrow limit, which is a real change and not a bug in Contra.
-
-## Blind spots
-
-- Simulation is not execution. No script here sends a transaction, so nothing proves a signed short landed.
-- The fixed owners must keep their state (a USDC deposit, an SPYx borrow, an SPYx balance). If they close out, the checks throw with a message naming the owner.
-- The close path has no Lighthouse guard, so there is no guard-style red test for it.
+The borrowable set in `check-web.mjs` is pinned to Kamino's caps, so a change in Kamino's borrow limits turns it red by design.

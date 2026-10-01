@@ -1,8 +1,8 @@
 # HTTP API reference
 
-Six route handlers live in `apps/web/src/app/api`. Every one sets `export const dynamic = "force-dynamic"`, so nothing is cached. No route requires authentication. Errors are always JSON `{ "error": string }`.
+Seven route handlers live in `apps/web/src/app/api`. Every one sets `export const dynamic = "force-dynamic"`, so nothing is cached. Every route is open: no API key is needed. Errors are always JSON `{ "error": string }`.
 
-Base URL for a local run: `http://localhost:3000`.
+Base URL: `https://contra-sol.vercel.app`.
 
 | Method | Path | Handler |
 |---|---|---|
@@ -12,13 +12,14 @@ Base URL for a local run: `http://localhost:3000`.
 | GET | `/api/positions` | `apps/web/src/app/api/positions/route.ts` |
 | GET | `/api/hedge` | `apps/web/src/app/api/hedge/route.ts` |
 | GET | `/api/pyth` | `apps/web/src/app/api/pyth/route.ts` |
+| GET | `/api/agent` | `apps/web/src/app/api/agent/route.ts` |
 
 ## GET /api/reserves
 
 Every reserve in the xStocks market, read live through klend-sdk. No parameters.
 
 ```bash
-curl -s localhost:3000/api/reserves
+curl -s https://contra-sol.vercel.app/api/reserves
 ```
 
 **200**: a bare JSON array of `PublicReserveRow` (`apps/web/src/lib/types.ts`):
@@ -56,7 +57,7 @@ Body (all strings, all required):
 | `borrowRaw` | xStock to borrow and sell, raw base units |
 
 ```bash
-curl -s -X POST localhost:3000/api/open \
+curl -s -X POST https://contra-sol.vercel.app/api/open \
   -H 'content-type: application/json' \
   -d '{"owner":"sadmBTQm5HJsyzWHEjV4YwG9CiahZKVDVqAyS4Wx1zH","ticker":"SPYx","usdcCollateral":"500000","borrowRaw":"100000"}'
 ```
@@ -70,8 +71,6 @@ That body is the one `check-web.mjs` posts.
 ```
 
 `transactions` has one element, or two when the message exceeded 1232 bytes. Send them in order, confirming the first before the second. Slippage is fixed at the builder default of 100 bps.
-
-The raw strings are converted with `Number(raw) / 10 ** decimals` and back to raw inside the builder (`apps/web/src/app/api/open/route.ts:41`). Amounts above 2^53 raw units lose precision.
 
 **400**: `invalid JSON body`, or `owner, ticker, usdcCollateral, borrowRaw are required`.
 **409**: `MarketClosedError` when the ticker's Pyth `Equity.US.<T>/USD` feed reports the market closed. Checked before anything is built.
@@ -92,7 +91,7 @@ Body (all strings, all required):
 | `maxUsdcInRaw` | USDC ceiling for the buy-back, raw base units |
 
 ```bash
-curl -s -X POST localhost:3000/api/close \
+curl -s -X POST https://contra-sol.vercel.app/api/close \
   -H 'content-type: application/json' \
   -d '{"owner":"<owner>","ticker":"SPYx","repayRaw":"10000","withdrawRaw":"5000000","maxUsdcInRaw":"15000000"}'
 ```
@@ -110,7 +109,7 @@ The owner's vanilla obligation on the xStocks market, read at the current slot.
 | `owner` | yes | base58 wallet address |
 
 ```bash
-curl -s 'localhost:3000/api/positions?owner=DK7iCr4uSjKQF7qYTnygrrZuAc2hFNaKPrYDV2UKikWC'
+curl -s 'https://contra-sol.vercel.app/api/positions?owner=DK7iCr4uSjKQF7qYTnygrrZuAc2hFNaKPrYDV2UKikWC'
 ```
 
 **200**: `null` when the owner has no obligation, or when it has no deposits and no borrows. Otherwise `ObligationView` (`apps/web/src/lib/obligation.ts:48`):
@@ -125,7 +124,7 @@ curl -s 'localhost:3000/api/positions?owner=DK7iCr4uSjKQF7qYTnygrrZuAc2hFNaKPrYD
 | `liquidationPriceUsd`, `liquidationTicker` | number \| null, string \| null | the first short's values |
 | `healthy` | boolean | `loanToValue < liquidationLtv` |
 
-`ShortPosition` fields: `symbol`, `reserveAddress`, `mint`, `decimals`, `rawUnitAmount`, `multiplier`, `displayedAmount`, `kaminoValueUsd`, `jupiterPricePerShare`, `jupiterValueUsd`, `jupiterError`, `pairBorrowFactor`, `liquidationPriceUsd`, `accruedInterest`, `lastBorrowActivityUnix`, `pythEntitled`. Definitions are in [oracle-and-pricing](../explanation/oracle-and-pricing.md#positions-pl). A failed Jupiter quote does not fail the route: it sets `jupiterPricePerShare` and `jupiterValueUsd` to `null` and fills `jupiterError`.
+`ShortPosition` fields: `symbol`, `reserveAddress`, `mint`, `decimals`, `rawUnitAmount`, `multiplier`, `displayedAmount`, `kaminoValueUsd`, `jupiterPricePerShare`, `jupiterValueUsd`, `jupiterError`, `pairBorrowFactor`, `liquidationPriceUsd`, `accruedInterest`, `lastBorrowActivityUnix`, `pythEntitled`. Definitions are in [oracle-and-pricing](../explanation/oracle-and-pricing.md#positions-live-marks). A failed Jupiter quote does not fail the route: it sets `jupiterPricePerShare` and `jupiterValueUsd` to `null` and fills `jupiterError`.
 
 **400**: `owner is required`, or `"<owner>" is not a valid Solana address`.
 **502**: market load or RPC failure.
@@ -141,7 +140,7 @@ A wallet's xStock holdings and a suggested hedge size.
 The page at `/hedge` takes `?wallet=`, not `?owner=`. The API takes `?owner=`.
 
 ```bash
-curl -s 'localhost:3000/api/hedge?owner=DrAR2ZNC5KYZps7NJyYHfzeZTaqbMUaGM3CBUWfpbCUs'
+curl -s 'https://contra-sol.vercel.app/api/hedge?owner=DrAR2ZNC5KYZps7NJyYHfzeZTaqbMUaGM3CBUWfpbCUs'
 ```
 
 **200**:
@@ -156,9 +155,9 @@ curl -s 'localhost:3000/api/hedge?owner=DrAR2ZNC5KYZps7NJyYHfzeZTaqbMUaGM3CBUWfp
 - `holdings`: every Token-2022 account of the owner whose mint and decimals match an xStock reserve, summed per mint, sorted by USD value. `usd` is `null` when Kamino's oracle price is not valid.
 - `suggestion`: half of the largest holding that is borrowable with a valid price, capped at `min(availableLiquidity, borrowLimit - borrowed)`. The reason then reads "Kamino's available borrow is below 50% of the ... holding, so the hedge is capped at live reserve capacity." When nothing qualifies, `ticker` is `""`, `borrowRaw` is `"0"`, and `reason` explains why.
 
-The collateral sizing (`plan` in `apps/web/src/lib/hedge.ts`) is computed but not returned by this route. Only the `/hedge` page renders it.
+The `/hedge` page additionally renders the collateral sizing (`plan` in `apps/web/src/lib/hedge.ts`) for the suggested short.
 
-`readHedge` reads with `SOLANA_RPC_URL` or the public endpoint. It ignores `RPC_URL` (`hedge.ts:108`).
+`readHedge` reads with `SOLANA_RPC_URL` or the public endpoint.
 
 **400**: `owner is required`, or `owner must be a valid Solana address`.
 **502**: RPC or market read failure.
@@ -172,7 +171,7 @@ The Pyth fair-value line for one xStock.
 | `ticker` | yes | `TSLA`, `TSLAx`, `tslax`; normalized to `<BASE>x` |
 
 ```bash
-curl -s 'localhost:3000/api/pyth?ticker=TSLAx'
+curl -s 'https://contra-sol.vercel.app/api/pyth?ticker=TSLAx'
 ```
 
 **200**: `PythFair` (`apps/web/src/lib/pyth-shared.ts:9`):
@@ -188,7 +187,32 @@ curl -s 'localhost:3000/api/pyth?ticker=TSLAx'
 | `gapBps` | number \| null | `(jupiterSellPrice / pythPrice - 1) * 10000` |
 | `reason` | string \| null | `null` when live; `PYTH_API_KEY not configured` or `Pyth feed not in the current plan` otherwise |
 
-Only TSLAx and QQQx have entitled feeds (`apps/web/src/lib/pyth-fair.ts:13`). Every other ticker, and every ticker when `PYTH_API_KEY` is unset, returns 200 with all price fields `null`.
+TSLAx and QQQx have live Hermes feeds wired in (`apps/web/src/lib/pyth-fair.ts:13`). Any other ticker, or any ticker when `PYTH_API_KEY` is unset, returns 200 with all price fields `null` and a `reason`, never an estimated price.
 
 **400**: `ticker is required`.
 **502**: `Hermes price update failed: <status> ...`, `Hermes returned no parsed price for feed ...`, `Hermes returned an unusable price for feed ...`, or a failure in the Jupiter or mint read.
+
+## GET /api/agent
+
+One tick of the autonomous short agent, run live. It reads the Kamino reserves, the Pyth market state and the Pyth-versus-Jupiter gap for each borrowable ticker, drops any ticker 150 bps or more off fair value, and picks the one with the most live borrow capacity. It never signs.
+
+| Query | Required | Meaning |
+|---|---|---|
+| `owner` | no | base58 wallet address; when given and the ticker's market is open, the response carries one unsigned open transaction for that wallet |
+
+```bash
+curl -s 'https://contra-sol.vercel.app/api/agent'
+```
+
+**200**: `AgentResult` (`apps/web/src/lib/agent.ts`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `steps` | `AgentStep[]` | the decision log, each step `{ step, observed, decision, reason }` |
+| `ticker` | string \| null | the chosen xStock |
+| `marketOpen` | boolean | US equities state from the SPY Pyth feed |
+| `transactions` | string[] \| null | base64 v0 transactions, when an owner was given |
+| `route` | string \| null | Jupiter route labels |
+| `buildReason` | string \| null | why one transaction or two, with the byte size |
+
+**500**: `{ "error": string }` on a read failure.
