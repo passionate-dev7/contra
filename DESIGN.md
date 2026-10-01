@@ -1,4 +1,4 @@
-# Contra — design system
+# Contra: design system
 
 Contra is a broker's order ticket for shorting tokenized US equities on Solana,
 not a crypto dashboard. The direction is a light, dense clearinghouse ledger:
@@ -12,13 +12,13 @@ on the right, the way a floor broker's blotter and pad sit together.
 
 Two fixed columns above 1024px, stacked below it:
 
-- **Left — the blotter.** A ledger-ruled table of the market: the xStock
+- **Left, the blotter.** A ledger-ruled table of the market: the xStock
   reserves, each row showing symbol, borrow factor, borrow APY,
   available liquidity, and a status stamp (`BORROWABLE` or `LIMIT 0`). Above
   it, a ticker strip states the two live facts: the number of xStocks that
   can be shorted right now and the US market open/closed state. Below it, the
   `/positions` obligation summary when an owner is loaded.
-- **Right — the ticket.** A single fixed order-pad card: ticker select,
+- **Right, the ticket.** A single fixed order-pad card: ticker select,
   size in USD, collateral in USDC, live LTV / liquidation price / borrow
   APY readout, and the Open Short action. This card never scrolls out of
   view on desktop; on mobile it follows the blotter in document order.
@@ -72,8 +72,8 @@ where numbers must align in columns.
 4px base scale (4/8/12/16/24/32/48/64). Container max-width 1180px, 24px
 side gutters below 1024px, 48px above. Blotter/ticket split: `1fr` /
 `380px` with a 1px `--rule` divider, collapsing to a single column under
-1024px with the ticket rendered second... no: rendered **first** on mobile,
-since it is the primary action, then the blotter beneath it.
+1024px with the ticket rendered **first** on mobile, since it is the primary
+action, then the blotter beneath it.
 
 ## Components
 
@@ -82,7 +82,7 @@ since it is the primary action, then the blotter beneath it.
   hairline.
 - **Blotter row**: ticker, borrow factor plus the numeric columns, a stamp badge
   (`BORROWABLE` in `--positive` outline, or `LIMIT 0` in `--negative`
-  outline with the reason as a tooltip/subtext — never just greyed out).
+  outline with the reason as a tooltip/subtext, never just greyed out).
 - **Order ticket card**: `--paper-raised` fill, 1px `--rule-strong` border,
   radius 4px. Disabled tickers cannot be selected and show the reason
   inline, not just disabled styling.
@@ -96,7 +96,7 @@ since it is the primary action, then the blotter beneath it.
   space), empty (named, e.g. "No obligation for this address on the xStocks
   market yet"), and error (the real error message, never swallowed) states.
 
-## Motion (dial 2/5 — restrained)
+## Motion (dial 2/5, restrained)
 
 Only the live-market dot pulses (opacity, 2.4s ease-in-out loop) and a
 180ms transform+opacity on button press (`scale(0.97)`) / card entry
@@ -107,12 +107,7 @@ animation is wrapped in `@media (prefers-reduced-motion: no-preference)`.
 
 Phosphor, regular weight, 1 family, no hand-rolled SVG icons.
 
-## Diversification from the design log
+## What sets it apart
 
-Checked against every entry in `~/.config/agent-rules/frontend/design-log.jsonl`:
-this is the first light-surface, ledger-macrostructure entry with Spectral as
-the display face and a burnt-sienna accent — differs from every prior entry on
-macrostructure, display font and accent at minimum (Last Call: flight-board /
-Geist Mono / signal red; the two closest palette neighbours, graph-paper and
-newsprint-audit, use Space Grotesk/Newsreader and blue/red accents on a
-different macrostructure family).
+A light-surface, ledger-macrostructure interface with Spectral as the display
+face and a burnt-sienna accent: a printed exchange sheet beside an order pad.
