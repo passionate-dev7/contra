@@ -1,6 +1,6 @@
 /* Hallmark · component: fair-value line · genre: editorial · theme: clearinghouse ledger (DESIGN.md locked)
- * states: default · hover · focus · active · disabled · loading · error · success — text-only line: loading and error rendered, hover/focus/active/disabled n/a (no interaction)
- * contrast: pass (40-41) — ink-dim and negative on paper-raised, same pairs as the ticket body
+ * states: default · hover · focus · active · disabled · loading · error · success - text-only line: loading and error rendered, hover/focus/active/disabled n/a (no interaction)
+ * contrast: pass (40-41) - ink-dim and negative on paper-raised, same pairs as the ticket body
  */
 "use client";
 
@@ -66,8 +66,7 @@ export function PythLine({ ticker, initial }: { ticker: string; initial: PythFai
   if (!entitled) {
     return (
       <p className="font-[family-name:var(--font-mono)] text-xs tabular text-[var(--ink-dim)]">
-        No Pyth feed for {canonical} in the current plan (TSLAx and QQQx only), so no fair-value gap in bps is
-        shown.
+        Pyth fair value is live for TSLAx and QQQx. {canonical} shows no fair-value gap rather than an estimated one.
       </p>
     );
   }
@@ -92,7 +91,7 @@ export function PythLine({ ticker, initial }: { ticker: string; initial: PythFai
   if (data.pythPrice === null || data.jupiterSellPrice === null || data.gapBps === null || data.publishTime === null) {
     return (
       <p className="font-[family-name:var(--font-mono)] text-xs tabular text-[var(--ink-dim)]">
-        {data.reason ?? `No Pyth feed for ${canonical} in the current plan (TSLAx and QQQx only).`}
+        {data.reason ?? `Pyth fair value is live for TSLAx and QQQx. ${canonical} shows no fair-value gap rather than an estimated one.`}
       </p>
     );
   }

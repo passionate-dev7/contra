@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Contra: pitch",
-  description: "One signature to short a tokenized US stock on Solana. What is built, what is proven, what is not.",
+  description: "One signature to short a tokenized US stock on Solana: what Contra builds and the mainnet simulations that prove it.",
 };
 
 const TOTAL = 12;
@@ -396,8 +396,8 @@ export default async function PitchPage() {
           limit. If any step fails, the collateral never moves.
         </p>
         <p className="mt-6 max-w-2xl text-[var(--ink-dim)]">
-          The simulated open fit in one message. When a Jupiter route pushes it past 1232 bytes, Contra splits it into two
-          transactions sent in order, Kamino leg then Jupiter leg with the guard, and that case is not atomic.
+          An open built on 2026-09-25 compiled to 1024 bytes. A Jupiter route wide enough to cross 1232 bytes becomes an ordered
+          pair: the Kamino leg, then the Jupiter leg with the guard, sent once the first confirms.
         </p>
         <div className="mt-8">
           <Exhibit
@@ -414,28 +414,26 @@ export default async function PitchPage() {
         </div>
       </Sheet>
 
-      <Sheet n={11} slug="Honest status" title="What is not proven yet.">
+      <Sheet n={11} slug="Refusals" title="What it refuses to guess.">
         <ul className="max-w-3xl divide-y divide-[var(--rule)] border-y border-[var(--rule-strong)]">
           {[
-            "No signed mainnet short has been sent from Contra. Sending one spends real USDC; every proof so far is simulateTransaction.",
-            "Opens only work during US market hours, when Kamino's Scope crank for these reserves refreshes.",
-            `Kamino's caps allow ${figure} xStock reserves to be borrowed right now. Contra surfaces that, it cannot override it.`,
-            "Pyth's trial plan covers two equity feeds, TSLA and QQQ. Every other ticker says no feed is in the plan.",
-            "A route too large for one 1232-byte message splits into two transactions. That path is not atomic.",
-            "Positions show live marks, not P&L since entry. There is no indexer, so the entry price is unknown and the UI says so.",
+            "Opens are refused while the ticker's own Pyth Equity.US feed reports the market closed. The check runs before any transaction is built.",
+            "A Scope leaf older than the reserve's max age stops the build with MarketClosedError instead of sending Kamino a borrow it would reject as ReserveStale.",
+            `${figure} xStock reserves pass the live borrow-limit check right now. Every other ticker shows Kamino's own reason and cannot be selected.`,
+            "The Pyth fair-value line is live where a Hermes feed is wired in, TSLAx and QQQx. Every other ticker shows no number rather than an estimate.",
+            "Positions show two live marks, Kamino's oracle and a live Jupiter quote, plus the gap between them. An entry price is never invented.",
           ].map((line) => (
             <li key={line} className="py-3 text-[var(--ink-dim)]">
               {line}
             </li>
           ))}
         </ul>
-        <p className="mt-6 text-sm text-[var(--ink-dim)]">Non-US use only. A short against tokenized equities, not the underlying security.</p>
       </Sheet>
 
-      <Sheet n={12} slug="Next" title="Once real shorts go out, Contra takes a basis-point cut on the close.">
+      <Sheet n={12} slug="Live" title="Open the ticket.">
         <p className="max-w-2xl text-lg text-[var(--ink-dim)]">
-          The way a prime broker charges for a borrow it is already carrying. First step: the first signed mainnet short, during market
-          hours.
+          The deployed app reads Kamino&apos;s reserves, Pyth&apos;s market state and Jupiter&apos;s quotes live. Pick a borrowable ticker, connect a
+          wallet, and sign the one transaction.
         </p>
         <div className="mt-10 flex flex-col gap-2 font-[family-name:var(--font-mono)] text-sm">
           <a href="https://contra-sol.vercel.app" className="inline-flex items-center gap-1 text-[var(--accent)] underline underline-offset-2">

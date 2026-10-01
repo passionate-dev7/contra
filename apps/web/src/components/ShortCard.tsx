@@ -1,7 +1,7 @@
 /* Hallmark · component: short position card · genre: editorial · theme: clearinghouse ledger (DESIGN.md locked)
- * states: default only — a server-rendered summary of already-fetched data; its two interactive children
+ * states: default only - a server-rendered summary of already-fetched data; its two interactive children
  * (PythLine, CloseButton) each ship their own full state set.
- * contrast: pass (40-41) — ink-dim/negative/positive on paper-raised, same pairs as the rest of the page.
+ * contrast: pass (40-41) - ink-dim/negative/positive on paper-raised, same pairs as the rest of the page.
  */
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { fmtUsd, fmtNum, fmtPct } from "@/lib/format";
@@ -16,12 +16,10 @@ function formatActivity(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
-/** One open short on the obligation: the entry context Contra can honestly
- * show (last on-chain borrow/repay activity, since there is no indexer to
- * recover the original open price or date), a live mark from two independent
- * sources (Kamino's own Scope oracle vs a live Jupiter quote), interest
- * accrued since that last activity, the Pyth fair-value cross-check for
- * entitled tickers, and the existing close flow. */
+/** One open short on the obligation: the last on-chain borrow/repay activity,
+ * a live mark from two independent sources (Kamino's own Scope oracle vs a live
+ * Jupiter quote), interest accrued since that last activity, the Pyth fair-value
+ * cross-check for tickers with a live feed, and the close flow. */
 export function ShortCard({ owner, short, usdcDeposit }: { owner: string; short: ShortPosition; usdcDeposit: PositionLine | undefined }) {
   const gapPct = short.jupiterValueUsd !== null && short.kaminoValueUsd > 0 ? (short.jupiterValueUsd / short.kaminoValueUsd - 1) * 100 : null;
   const warn = gapPct !== null && Math.abs(gapPct) > WARN_GAP_PCT;
@@ -68,9 +66,8 @@ export function ShortCard({ owner, short, usdcDeposit }: { owner: string; short:
       </dl>
 
       <p className="mt-2 text-xs text-[var(--ink-dim)]">
-        Entry context: last borrow/repay activity on this position was {formatActivity(short.lastBorrowActivityUnix)}. Contra has no
-        indexer, so the original open price isn&apos;t tracked; the marks above and the interest above are live reads against the
-        current chain state, not P&amp;L since the short was first opened.
+        Last borrow/repay activity on this position: {formatActivity(short.lastBorrowActivityUnix)}. The marks and the interest above
+        are live reads of the current chain state: Kamino&apos;s Scope oracle against a live Jupiter quote.
       </p>
 
       {short.jupiterError !== null && (
