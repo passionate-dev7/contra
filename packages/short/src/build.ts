@@ -15,8 +15,8 @@ import { loadMarket, findUsdcReserve, findXstockReserve, vanillaObligationType, 
 import { buildScopeRefresh } from "./scope.js";
 import { kitIxToWeb3, readOnlySigner } from "./kit.js";
 import { getQuote, getSwapInstructions, routeLabel, type JupQuote } from "./jupiter.js";
-import { withPostconditions } from "./guard.js";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { withPostconditions, assertTokenAccountGteIx } from "./guard.js";
+import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { USDC_MINT, XSTOCKS_MARKET_LUT } from "./constants.js";
 
 const V2_IXS = true;
@@ -40,6 +40,8 @@ export interface CloseShortRequest {
   withdrawUsdc: number; // UI USDC to withdraw back out
   maxUsdcIn: number; // UI USDC budget to buy back the xStock, quote-checked
   slippageBps?: number;
+  /** Proof-only override for the Lighthouse xStock postcondition bound. */
+  minXstockAfterOverride?: bigint;
 }
 
 export interface BuiltShort {
@@ -273,25 +275,49 @@ export async function buildCloseShort(conn: Connection, req: CloseShortRequest):
   const lookupTables = await resolveLookupTables(conn, [XSTOCKS_MARKET_LUT, ...swapIxs.lookupTableAddresses]);
   const payer = new PublicKey(req.owner);
 
-  const combined = await compileMessage(conn, payer, allIxs, lookupTables);
+  // Lighthouse postcondition: the close buys xStock exact-in with a buffer so
+  // min-out >= repay, then repays. After the whole close the owner's xStock
+  // ATA must hold >= its pre-close balance, so a buy-back shortfall reverts
+  // on-chain instead of merely failing an off-chain check.
+  const xstockAta = getAssociatedTokenAddressSync(
+    new PublicKey(xstockReserve.getLiquidityMint().toString()),
+    payer,
+    true,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  let preXstock = 0n;
+  try {
+    const bal = await conn.getTokenAccountBalance(xstockAta, "confirmed");
+    preXstock = BigInt(bal.value.amount);
+  } catch {
+    preXstock = 0n;
+  }
+  const minXstockAfter = req.minXstockAfterOverride ?? preXstock;
+  const guardIx = assertTokenAccountGteIx(xstockAta, minXstockAfter);
+
+  const guardedAllIxs = [...allIxs, guardIx];
+  const combined = await compileMessage(conn, payer, guardedAllIxs, lookupTables);
   const closeSize = trySerializedSize(combined);
-  const base = { instructions: allIxs, lookupTables, quote, route: routeLabel(quote), scopeTokens: scopeRefresh.tokens };
+  const base = { instructions: guardedAllIxs, lookupTables, quote, route: routeLabel(quote), scopeTokens: scopeRefresh.tokens };
   if (closeSize !== null && closeSize <= 1232) {
     return {
       ...base,
       transaction: combined,
-      reason: `single v0 transaction: Scope refresh + Jupiter buy + repay + withdraw fit within the 1232-byte limit (${closeSize} bytes)`,
+      reason: `single v0 transaction: Scope refresh + Jupiter buy + repay + withdraw + Lighthouse xStock>=${minXstockAfter} fit within the 1232-byte limit (${closeSize} bytes)`,
     };
   }
   // Split: buy back first, then repay + withdraw once the xStock is in the owner's account.
+  // The guard asserts the post-close xStock balance, so it lives at the end of the repay leg.
   const jupTx = await compileMessage(conn, payer, [computeBudgetIx, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup], lookupTables);
-  const kaminoTx = await compileMessage(conn, payer, [...lead, ...kaminoIxs], lookupTables);
+  const kaminoGuarded = [...lead, ...kaminoIxs, guardIx];
+  const kaminoTx = await compileMessage(conn, payer, kaminoGuarded, lookupTables);
   return {
     ...base,
+    instructions: [...lead, ...swapIxs.setup, swapIxs.swap, ...swapIxs.cleanup, ...kaminoGuarded.slice(lead.length)],
     transaction: jupTx,
     secondTransaction: kaminoTx,
     reason:
       "split into 2 transactions: the combined message exceeded the 1232-byte v0 limit. " +
-      "tx1 = Jupiter buy-back, tx2 (secondTransaction) = Scope refresh + repay + withdraw, sent after tx1 lands.",
+      `tx1 = Jupiter buy-back, tx2 (secondTransaction) = Scope refresh + repay + withdraw + Lighthouse xStock>=${minXstockAfter}, sent after tx1 lands.`,
   };
 }
