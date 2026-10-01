@@ -1,45 +1,58 @@
 # Contra
 
-Live: https://contra-sol.vercel.app
-Repo: https://github.com/passionate-dev7/contra
-Developer docs: [docs/README.md](docs/README.md)
+**Short a tokenized US stock on Solana with one signature.** Deposit USDC on Kamino, borrow the xStock, sell it on Jupiter: one v0 transaction, a Scope oracle refresh in front of it, a Lighthouse postcondition behind it.
 
-Contra is a short ticket for tokenized US stocks on Solana. Pick a ticker, deposit USDC, and one transaction deposits it as collateral on Kamino, borrows the xStock, and sells it through Jupiter. Closing is the same idea in reverse. That is one signature whenever the combined message fits Solana's 1232-byte limit; when a Jupiter route pushes it over, `packages/short/src/build.ts` splits it into two transactions sent in order, and that path is two signatures and not atomic (see below).
+- Live app: https://contra-sol.vercel.app
+- Pitch deck: https://contra-sol.vercel.app/pitch
+- Autonomous short agent: https://contra-sol.vercel.app/agent
+- Developer docs: https://contra-sol.vercel.app/docs (source in [docs/README.md](docs/README.md))
+- Repo: https://github.com/passionate-dev7/contra
 
 ## The problem
 
-Kamino's xStocks Market (`5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua`) already prices the borrow side of nine tokenized stocks. Pulled live from `api.kamino.finance/kamino-market/.../reserves/metrics` on 2026-09-25:
+Kamino's xStocks Market (`5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua`) prices the borrow side of ten tokenized stocks and carries a live borrow rate on every one. Almost nobody borrows on it. Read from `api.kamino.finance/kamino-market/.../reserves/metrics` on 2026-09-25 and re-read on 2026-10-01:
 
-| xStock supplied vs borrowed (USD) | |
-|---|---|
-| Total xStock collateral supplied | $22,689,278.56 |
-| Total xStock currently borrowed | $157,203.77 |
-| Utilization | 0.69% |
-| Tickers with $0 ever borrowed | GOOGLx, CRCLx, AAPLx, MSTRx, HOODx, METAx (6 of 10) |
+| xStock supplied vs borrowed (USD) | 2026-09-25 | 2026-10-01 |
+|---|---|---|
+| Total xStock collateral supplied | $22,689,278.56 | $21,781,451.01 |
+| Total xStock currently borrowed | $157,203.77 | $150,127.16 |
+| Utilization | 0.69% | 0.69% |
+| Tickers with $0 ever borrowed | GOOGLx, CRCLx, AAPLx, MSTRx, HOODx, METAx (6 of 10) | same six |
 
-The rails exist and carry a live borrow rate on every one of them. Almost nobody uses them. Part of that is Kamino's own borrow caps: querying `contra-puce.vercel.app/api/reserves` right now shows only SPYx, QQQx, TSLAx, and NVDAx as actually borrowable; the other six read `"borrow limit 0 on Kamino"` straight from the deployed reserve config, not from a guess. The rest is that borrowing an xStock, selling it on Jupiter, and later buying it back to repay is at least four separate instructions across two protocols, each needing a fresh Kamino oracle refresh and a fresh Jupiter quote. Nobody had wired that into one thing a wallet can sign once.
+The reason is the workflow. Kamino's own guide opens a short in three wallet confirmations: supply USDC, borrow the xStock, swap it for USDC on a separate screen with a fresh quote. Each borrow also needs a Kamino oracle refresh at the right position in the message, or klend rejects it as `ReserveStale`. Between the second and third confirmation the trader holds a borrowed stock and no short. Contra builds that whole sequence as one transaction.
 
-## What Contra does
+## What it does
 
-**Open a short (one signature when it fits).** The order ticket reads Kamino's live reserve config, shows which xStocks are borrowable right now with the reason for the ones that aren't, then builds a single versioned transaction: `deposit_reserve_liquidity_and_obligation_collateral` (USDC in) → `borrow_obligation_liquidity` (the xStock) → a Jupiter swap of that xStock back to USDC, composed from Jupiter's swap-instructions endpoint rather than a pre-built transaction so it fits alongside the Kamino instructions in the same message. If the compiled message exceeds 1232 bytes, the build returns a `secondTransaction`: tx1 is the Kamino deposit and borrow, tx2 is the Jupiter sell plus the Lighthouse guard, sent only after tx1 lands. The wallet signs twice and the two legs are not atomic: if tx2 fails, the borrow stays open and the owner holds the borrowed xStock.
+**One signature to open.** The order ticket builds a single versioned transaction: `deposit_reserve_liquidity_and_obligation_collateral` (USDC in), `borrow_obligation_liquidity` (the xStock), then a Jupiter swap of that xStock back to USDC. The Jupiter leg is composed from Jupiter's swap-instructions endpoint, not taken as a pre-built transaction, so it lands in the same message as the Kamino instructions. Kamino's published xStocks lookup table (`8ofreL6hKfEet1DnhHVGvCTnSdz4pg85PpbuCUHnEcKm`, 95 entries) compresses the account list, and an open built on 2026-09-25 compiled to 1024 bytes against Solana's 1232-byte limit. `packages/short/src/build.ts` measures every compiled message; a Jupiter route wide enough to cross the limit is emitted as an ordered pair, the second sent after the first confirms.
 
-**Close a short (one signature when it fits).** Same shape in reverse: buy the xStock back through Jupiter, `repay_obligation_liquidity`, `withdraw_obligation_collateral_and_redeem_reserve_collateral`. Jupiter has no exact-out route for these mints, so the close buys exact-in with a small buffer over the oracle price and checks the quote's minimum-out covers the repay before it ever builds a transaction. The same 1232-byte rule applies: a route that does not fit is split into a Jupiter buy-back (tx1) followed by the Scope refresh, repay and withdraw (tx2). A Byreal route was measured over the limit; a Riptide route fit at 1165 bytes.
+**One signature to close.** The same message in reverse: buy the xStock back through Jupiter, `repay_obligation_liquidity`, `withdraw_obligation_collateral_and_redeem_reserve_collateral`. Jupiter has no exact-out route for these mints, so the close buys exact-in with a buffer over the oracle price and checks that the quote's minimum-out covers the repay before it builds anything.
 
-**Price freshness, not a stale-oracle short.** Kamino prices every xStock reserve through a Scope chain (Chainlink Data Streams and Pyth Lazer feeding derived entries). Before either transaction is built, Contra recomputes how stale the upstream leaves are and prepends a `refresh_price_list` instruction at index 1 (right after the compute-budget instruction, which is the only thing Scope allows before it) covering every derived entry the reserves touch. If the upstream leaves themselves are too old, a fresh in-transaction refresh can't fix that, and building stops with `MarketClosedError` instead of submitting a transaction Kamino would reject with `ReserveStale`.
+**Never a stale-oracle short.** Kamino prices every xStock reserve through a Scope chain (Chainlink Data Streams and Pyth Lazer leaves feeding derived entries). Before building, Contra recomputes how old the upstream leaves are and prepends a `refresh_price_list` instruction at index 1, directly after the compute-budget instruction (the only instruction Scope allows before it), covering every derived entry the reserves touch. If the leaves themselves are older than the reserve's `maxAgePriceSeconds`, the build stops with `MarketClosedError` instead of producing a transaction Kamino would reject.
 
-**A bad outcome reverts on-chain, not just off-screen.** The open transaction ends with a Lighthouse `AssertTokenAccount` instruction (`packages/short/src/guard.ts`) asserting the owner's USDC balance is at or above the quoted minimum after the deposit and the Jupiter sell land. A normal open passes it and Lighthouse is a genuine on-chain participant in the transaction, not a client-side sanity check; an impossible bound (asking Lighthouse to assert a balance the transaction can't produce) reverts the whole transaction with Lighthouse's own custom error `6001`, before any state changes. `packages/short/check-guard.mjs` reruns both: the guarded open's simulation returns `err: null` with Lighthouse's program log present, and the impossible-bound run reverts with `Custom: 6001` from the Lighthouse program specifically, not some other instruction failing first.
+**A bad fill reverts on-chain.** The open ends with a Lighthouse `AssertTokenAccount` instruction (`packages/short/src/guard.ts`) asserting that the owner's USDC balance is at or above the quoted minimum after the deposit and the sale. A normal open passes it, with Lighthouse a real participant in the transaction. An impossible bound reverts the whole message with Lighthouse's own custom error `6001` before any state changes. `packages/short/check-guard.mjs` reruns both: the guarded open simulates with `err: null` and Lighthouse's program log present, and the impossible-bound run reverts with `Custom: 6001` attributed to the Lighthouse program.
 
-**Only what's actually borrowable.** The ticket and blotter both read `/api/reserves`, which computes `borrowable` from the deployed `borrowLimit` and available liquidity on each reserve, not a hardcoded list. A blocked ticker can't be selected, and the reason is shown inline instead of just greying it out. The blotter's borrow-factor column comes from the same live reserve config: Kamino's per-pair borrow factor (`market.getMaxAndLiquidationLtvAndBorrowFactorForPair`), the multiplier applied to a borrow's value when it counts against LTV, not a flat number typed into the UI.
+**Market-hours gate.** `/api/open` reads the ticker's own Pyth `Equity.US.<TICKER>/USD` feed and returns 409 `MarketClosedError` while that market is closed, before any Kamino or Jupiter call. `apps/web/check-open-gate.mjs` reads Hermes independently and asserts the route agrees ticker by ticker. Closing is not gated by market hours.
 
-**Pyth fair-value cross-check.** Inside the order ticket and on the positions page, `/api/pyth` reads Hermes' live `Equity.US.<TICKER>/USD` price and compares it to a live Jupiter sell quote for the same ticker, showing the gap in bps. Pyth's current trial plan entitles two feeds only, TSLA and QQQ, so TSLAx and QQQx get the live cross-check and every other xStock states plainly that no feed is available in the current plan rather than showing a stale or invented number.
+**Only what Kamino will actually lend.** The ticket and blotter read `/api/reserves`, which computes `borrowable` from each reserve's deployed `borrowLimit` and available liquidity. Today that is SPYx, QQQx, TSLAx and NVDAx; the other six read `borrow limit 0 on Kamino` straight from reserve config. A blocked ticker is not selectable, and the reason is printed beside it. The borrow-factor column comes from Kamino's per-pair factor (`market.getMaxAndLiquidationLtvAndBorrowFactorForPair`), the multiplier applied to a borrow's value when it counts against LTV.
 
-**Hedge my holdings.** `/hedge?wallet=<address>` reads a wallet's xStock token accounts directly (`getParsedTokenAccountsByOwner`, Token-2022 program), then proposes shorting half of its largest borrowable holding at Kamino's live max LTV, capped by whatever borrow capacity the reserve actually has left. `/api/hedge` returns the same holdings and suggestion as JSON; `apps/web/check-hedge.mjs` independently reads the same wallet's raw SPYx balance straight from the RPC and asserts the API's number and the proposed borrow size both come from that live balance.
+**Pyth fair value against Jupiter.** In the ticket and on the positions page, `/api/pyth` reads Hermes' live `Equity.US.<TICKER>/USD` price and compares it to a live Jupiter sell quote for the same ticker, showing the gap in basis points. The line is live for TSLAx and QQQx, the two tickers with a Hermes price feed wired in. Every other xStock shows no figure rather than an estimated one.
 
-**Position tracking with live P&L, honestly scoped.** `/positions?owner=<address>` reads the owner's Kamino obligation on the xStocks market and shows, per open short: the borrowed amount (raw-mint units and the Token-2022 scaled-UI amount a wallet would actually display), two independent live marks (Kamino's own Scope-oracle value, used for LTV and liquidation, versus a live Jupiter sell quote, what the market would actually pay to close it right now) and the gap between them, the LTV versus liquidation LTV, the liquidation price, interest accrued on the borrow, and, for TSLAx and QQQx, the same Pyth fair-value line as the ticket. Contra has no indexer, so it does not know the original entry price or the date the short was first opened; what it shows instead, and states as such in the UI, is the last on-chain borrow/repay activity plus live marks against the current chain state. `apps/web/check-positions.mjs` independently decodes the owner's obligation account with klend-sdk's own layout and asserts the API's borrow amount matches, then proves the check can fail by asserting a freshly generated owner gets the named empty state, not a fabricated match.
+**Hedge my holdings.** `/hedge?wallet=<address>` reads a wallet's xStock token accounts directly (`getParsedTokenAccountsByOwner`, Token-2022 program), then proposes shorting half of its largest borrowable holding at Kamino's live max LTV, capped by the borrow capacity the reserve has left. `/api/hedge` returns the same holdings and suggestion as JSON. `apps/web/check-hedge.mjs` reads the wallet's raw SPYx balance straight from the RPC and asserts that the API's number and the proposed borrow size both come from it.
+
+**Live positions with dual marks.** `/positions?owner=<address>` reads the owner's Kamino obligation on the xStocks market and shows, per open short: the borrowed amount (raw-mint units and the Token-2022 scaled-UI amount a wallet displays), two independent live marks (Kamino's Scope-oracle value, which drives LTV and liquidation, and a live Jupiter sell quote, what the market pays right now) and the gap between them, LTV against liquidation LTV, the liquidation price, interest accrued on the borrow, the time of the last on-chain borrow or repay, and the Pyth fair-value line for TSLAx and QQQx. `apps/web/check-positions.mjs` decodes the owner's obligation account with klend-sdk's own layout and asserts the API's borrow amount matches, then asserts that a freshly generated owner gets the named empty state.
+
+**Autonomous short agent.** `/agent` runs one tick of a decision loop on live data and prints every step as observed, decision, reason: it reads the Kamino reserves, checks the Pyth market state, measures the Pyth-versus-Jupiter gap for each borrowable ticker, drops any ticker 150 bps or more off fair value, and picks the one with the most live borrow capacity. Given a wallet address, it hands back one unsigned open transaction for that wallet to sign. `/api/agent` returns the same decision log as JSON. The agent holds no key and signs nothing.
+
+## Why it is hard
+
+- **Four programs, one message.** Compute Budget, Scope, Kamino klend, Jupiter and Lighthouse instructions share a single v0 message. Scope requires its refresh immediately after the compute-budget instruction, allows one refresh per transaction, and every reserve in the transaction has to share one Scope feed. The builder enforces all three.
+- **Oracle freshness is a property of the leaves.** A derived Scope entry can be recomputed by anyone; a Chainlink or Pyth Lazer leaf only moves when its provider posts a report. The builder walks the chain post-order and checks leaf age per reserve, so it refuses early instead of failing on-chain.
+- **Token-2022 scaled-UI amounts.** xStock mints carry a `scaledUiAmountConfig` multiplier. Contra reads it from the parsed mint and prices one displayed share, so the positions page and the fair-value line agree with what a wallet shows.
+- **The checkers cannot share the builder's blind spots.** Every proof is checked by a script that never imports the code that built the transaction.
 
 ## Evidence
 
-Two mainnet `simulateTransaction` runs, each checked by a script that never imports the code that built the transaction and instead re-decodes the raw account bytes with klend-sdk's own on-chain layout:
+Two mainnet `simulateTransaction` runs, each checked by a script that re-decodes the raw account bytes with klend-sdk's on-chain layout instead of importing the builder:
 
 | | Open (`packages/short/check.mjs`) | Close (`packages/short/check-close.mjs`) |
 |---|---|---|
@@ -48,24 +61,38 @@ Two mainnet `simulateTransaction` runs, each checked by a script that never impo
 | Post-conditions checked | obligation USDC deposit increases; obligation SPYx borrow increases by exactly the requested raw amount; the owner's xStock account nets to ~0 (borrowed then sold in the same transaction); the owner's USDC delta matches collateral-out plus sale proceeds within 3% | borrow decreases by the repaid amount after accruing interest to the post-refresh rate; USDC collateral decreases by the withdrawn amount at the post-refresh exchange rate; the xStock account nets to a bounded surplus, never negative; USDC delta matches withdrawn minus buy-back cost |
 | Result, rerun 2026-09-25 | `GREEN: all post-conditions held` (`simulation returned err: null`) | `GREEN: all post-conditions held` on the artifact in the repo |
 
-The open-short run above is a live rerun of `npx tsx src/simulate.ts` followed by `node check.mjs`, not a cached result: it printed the same five `PASS` lines shown in `packages/short/artifacts/sim-open.json`.
+The open run is a live rerun of `npx tsx src/simulate.ts` followed by `node check.mjs`: five `PASS` lines, as recorded in `packages/short/artifacts/sim-open.json`.
 
-A check that can't fail proves nothing, so each direction also has a red counterpart in `packages/short/artifacts/`: `sim-open-red.json` asks to borrow 1 whole TSLAx and the simulation reverts on-chain with klend's custom error 6009 (`ReserveStale`); `sim-close-red.json` asks to withdraw $4,000 of USDC collateral against a 0.01 SPYx repay and reverts with custom error 6011 (`WithdrawTooLarge`). Both checkers correctly report `RED` on these, which is what makes the `GREEN` on the real runs mean something.
+Every check has a red counterpart in `packages/short/artifacts/`, which is what makes each `GREEN` mean something:
 
-The same pattern covers the Lighthouse postcondition: `packages/short/check-guard.mjs` reruns `simulate-guard.ts pass` and `simulate-guard.ts fail`, rerun 2026-09-25: the guarded open returns `err: null` with `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 invoke` in the logs, and the impossible-bound run reverts with `{"InstructionError":[11,{"Custom":6001}]}`, the failure attributed to that same Lighthouse program in the logs rather than some other instruction.
+| Artifact | Request | Result |
+|---|---|---|
+| `sim-open-red.json` | borrow 1 whole TSLAx | reverts with klend custom error 6009 (`ReserveStale`); `check.mjs` reports `RED` |
+| `sim-close-red.json` | withdraw $4,000 of USDC collateral against a 0.01 SPYx repay | reverts with custom error 6011 (`WithdrawTooLarge`); `check-close.mjs` reports `RED` |
+| `sim-guard-pass.json` | normal open with the Lighthouse bound | `err: null`, `Program L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95 invoke` in the logs |
+| `sim-guard-fail.json` | impossible USDC bound | `Custom: 6001`, the failure attributed to the Lighthouse program in the logs |
 
-`check-web.mjs` builds the deployed Next.js app, boots it, and asserts against the live routes: `/api/reserves` returns exactly the borrowable set computed above, the home page states the live "N of M xStocks can be shorted" figure and the US market open/closed state, and `/api/open` returns a transaction that actually invokes both the Kamino program and Jupiter's router. `apps/web/check-hedge.mjs` and `apps/web/check-positions.mjs` extend the same independent-decode discipline to `/hedge` and `/positions`: each re-reads the relevant on-chain state directly (raw token accounts for the hedge check, a raw obligation-account decode via klend-sdk's own layout for the positions check) rather than trusting the app's own arithmetic, and `check-positions.mjs` also asserts the negative case, that a freshly generated owner gets the named empty state, not a fabricated match.
+`check-web.mjs` builds the Next.js app, boots it, and asserts against live routes: `/api/reserves` returns exactly the borrowable set, the home page states the live "N of M xStocks can be shorted" figure and the US market open or closed state, and `/api/open` returns a transaction that invokes both the Kamino program and Jupiter's router. `apps/web/check-open-gate.mjs`, `check-hedge.mjs`, `check-positions.mjs` and `check-pyth.mjs` each re-read the relevant state directly (Hermes, raw token accounts, a raw obligation decode) instead of trusting the app's own arithmetic. Walkthrough: [docs/how-to/run-the-mainnet-proofs.md](docs/how-to/run-the-mainnet-proofs.md).
 
-## Honest status
+## How it works
 
-- No signed mainnet short has been sent from Contra. Every proof above is `simulateTransaction`, never a submitted transaction, because sending one costs real USDC and the two red tests exist specifically to show the guard rails fire before that point.
-- Opening a short only works during US market hours: `/api/open` checks the ticker's Pyth `Equity.US.<T>/USD` market status and returns 409 `MarketClosedError` when it is closed (`apps/web/check-open-gate.mjs` proves it against Hermes). Separately, `buildOpenShort` and `buildCloseShort` throw `MarketClosedError` whenever Kamino's Scope leaves are too old to refresh, rather than submit a transaction against a stale oracle. Closing is not blocked by market hours.
-- Pyth's own live equity price (used for the fair-value cross-check, separate from Kamino's Scope-priced oracle) needs `PYTH_API_KEY` in `.env`; Hermes has required a key on every price-update request since 2026-08-26. Without it, `requireFreshEquityPrice` and `/api/pyth` report the honest reason rather than silently skipping the check or showing a stale number.
-- Kamino's own borrow caps currently allow only 4 of the 10 xStock reserves to be shorted (SPYx, QQQx, TSLAx, NVDAx); the other six have a deployed borrow limit of 0. Contra can't override that, only surface it.
-- Pyth's current trial plan entitles two equity feeds, TSLA and QQQ. The fair-value line on TSLAx and QQQx is a live cross-check; every other xStock (SPYx, NVDAx, and the six with a zero borrow cap) states plainly that no feed is in the current plan.
-- The positions page's "P&L" is a live mark, not profit-and-loss since the short was opened. Contra runs no indexer and does not record when a short was first opened or at what price; `/positions` shows the last on-chain borrow/repay timestamp and interest accrued since that action, plus two live marks (Kamino's oracle and a live Jupiter quote), and says so in the UI rather than implying a P&L figure it can't actually compute.
+```
+wallet --POST /api/open--> apps/web --buildOpenShort--> packages/short
+                                                          |  load Kamino xStocks market, read reserves
+                                                          |  walk Scope chain, build refresh_price_list
+                                                          |  quote + swap-instructions from Jupiter
+                                                          |  compile v0 message with the market lookup table
+                                                          |  append Lighthouse AssertTokenAccount
+wallet <--unsigned base64 v0 transaction-----------------+
+wallet signs (Wallet Standard), sends, confirms
+```
 
-## Run locally
+- `packages/short` is the protocol layer. It returns unsigned transactions and never touches a key.
+- `apps/web` is the Next.js interface: the ticket, the blotter, `/positions`, `/hedge`, `/agent`, `/pitch`, `/docs`, and the API routes. The browser signs through the Wallet Standard.
+- Components, sequence diagrams and the byte-budget argument: [ARCHITECTURE.md](ARCHITECTURE.md).
+- Security model, what each guard guarantees: [docs/explanation/security-model.md](docs/explanation/security-model.md).
+
+## Run it
 
 ```
 pnpm install
@@ -77,21 +104,15 @@ node check.mjs                           # independently verify the artifact
 npx tsx src/simulate-close.ts && node check-close.mjs
 npx tsx src/simulate-guard.ts pass && npx tsx src/simulate-guard.ts fail && node check-guard.mjs
 cd ../../apps/web
+node check-open-gate.mjs                 # /api/open agrees with Hermes market hours, ticker by ticker
 node check-hedge.mjs                     # independent hedge check, builds and boots the app
-node check-positions.mjs                 # independent positions check (on-chain decode vs API vs page), builds and boots the app
+node check-positions.mjs                 # on-chain decode vs API vs page, builds and boots the app
 ```
 
-Environment: `SOLANA_RPC_URL` (or `RPC_URL`) for a Solana RPC endpoint, `PYTH_API_KEY` for live Hermes price checks. Neither is required to read reserves; both are required to build a real short.
+Environment: `SOLANA_RPC_URL` (or `RPC_URL`) selects the Solana RPC endpoint. `PYTH_API_KEY`, placed in `.env`, turns on the live Hermes price behind the fair-value line.
 
-## Risks
+## Built on / tracks
 
-- **Liquidation.** A short is a leveraged position: if the xStock's price rises against the USDC collateral, the obligation can be liquidated on Kamino like any other borrow.
-- **Borrow caps.** Six of ten xStock reserves are capped to zero borrow by Kamino today. That can change, but Contra doesn't control it and states the live number rather than a fixed list.
-- **Oracle staleness.** The Scope price chain depends on Chainlink Data Streams and Pyth Lazer cranks that run during US market hours. Outside that window, or if a crank falls behind, opens and closes are blocked once Scope leaves age past the reserve limit rather than proceeding on a stale price; opens are also refused while the US market is closed.
-- **Non-US use only**, stated on the live site's footer. This is a short against tokenized equities, not the underlying security, and it isn't offered to US persons.
+**Pyth.** The live `Equity.US.<TICKER>/USD` Hermes feed gates every open on market-open state before a transaction is built, and supplies the fair-value line against Jupiter's price, in addition to Kamino's own Scope oracle.
 
-## Tracks entered
-
-**Pyth**: the live `Equity.US.<TICKER>/USD` Hermes feed gates every open on market-open state before a transaction is built, and supplies the fair-value line against Jupiter's price, separate from and in addition to Kamino's own Scope oracle.
-
-Meteora's DBC/Clawpump track was not entered: shorting an already-liquid, already-tokenized stock has no honest bonding-curve mechanic, and forcing one in would not reflect what the product actually does.
+**Composed programs.** Kamino klend and the xStocks Market, Scope, Jupiter, Lighthouse, Token-2022, Compute Budget and the Associated Token Account program. Contra deploys no program of its own: the transaction is the protocol.
